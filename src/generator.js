@@ -3,9 +3,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { BrowserSession } from "./browser-session.js";
-import { ChatGPTPage } from "./chatgpt-page.js";
 import { validateChatGPTUrl } from "./config.js";
 import { captureImages } from "./image-capture.js";
+import { createSurfaceAdapter } from "./surface-adapters.js";
+import { resolveSurfaceTarget } from "./surface-config.js";
 import { normalizePrompt, normalizeSourceImages } from "./validation.js";
 
 function jobDirectoryName(jobId) {
@@ -27,32 +28,42 @@ export class ImageGenerator {
     return task;
   }
 
-  check() {
-    const task = this.tail.then(() => this.runCheck());
+  check(input = {}) {
+    const task = this.tail.then(() => this.runCheck(input));
     this.tail = task.catch(() => {});
     return task;
   }
 
-  async runCheck() {
-    const page = await this.session.getPage(this.config.chatgptUrl);
-    const adapter = new ChatGPTPage(page, this.config);
-    const status = await adapter.assertReady();
+  login(input = {}) {
+    const task = this.tail.then(() => this.runCheck(input, this.config.timeoutMs));
+    this.tail = task.catch(() => {});
+    return task;
+  }
+
+  async runCheck(input = {}, timeoutMs = 20000) {
+    const target = resolveSurfaceTarget(this.config, input);
+    const chatgptUrl = validateChatGPTUrl(target.url);
+    const page = await this.session.getPage(chatgptUrl);
+    const adapter = createSurfaceAdapter(target.surface, page, this.config);
+    const status = await adapter.assertReady(timeoutMs);
     return {
       ...status,
       browserMode: this.config.cdpUrl ? "cdp" : "dedicated_profile",
+      surface: target.surface,
     };
   }
 
   async runGeneration(input) {
     const prompt = normalizePrompt(input?.prompt);
     const sourceImages = await normalizeSourceImages(input?.source_images, this.config);
-    const chatgptUrl = validateChatGPTUrl(input?.chatgpt_url || this.config.chatgptUrl);
+    const target = resolveSurfaceTarget(this.config, input);
+    const chatgptUrl = validateChatGPTUrl(target.url);
     const jobId = randomUUID();
     const outputDir = path.join(this.config.outputDir, jobDirectoryName(jobId));
     await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 
     const page = await this.session.getPage(chatgptUrl);
-    const adapter = new ChatGPTPage(page, this.config);
+    const adapter = createSurfaceAdapter(target.surface, page, this.config);
     const candidates = await adapter.generate(prompt, sourceImages);
     const images = await this.captureImages(page, candidates, outputDir, this.config.maxImageBytes);
 
@@ -60,6 +71,7 @@ export class ImageGenerator {
       ok: true,
       jobId,
       chatgptUrl,
+      surface: target.surface,
       outputDir,
       images,
     };

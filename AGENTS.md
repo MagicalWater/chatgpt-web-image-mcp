@@ -14,6 +14,7 @@ This repository contains only a local ChatGPT web image automation adapter. Keep
 - Keep MCP stdout protocol-only; write diagnostics to stderr.
 - Return sanitized user-facing errors, never stack traces, environment dumps, or browser session data.
 - Keep browser operations serial because one profile has one shared composer state.
+- Keep `/images`-specific selectors in `src/images-page.js`; shared generation and capture behavior belongs in the base page adapter.
 
 ## Verification
 

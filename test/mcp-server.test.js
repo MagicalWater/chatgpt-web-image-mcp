@@ -16,14 +16,18 @@ test("an MCP client can discover and call the image tools", async (t) => {
   await fs.writeFile(imagePath, imageBytes);
 
   const fakeGenerator = {
-    async check() {
+    async check(input) {
+      assert.equal(input.surface, "images");
       return { ready: true, browserMode: "test" };
     },
     async generate(input) {
       assert.equal(input.prompt, "draw a test image");
+      assert.equal(input.surface, "images");
       return {
         ok: true,
         jobId: "job-test",
+        surface: "images",
+        chatgptUrl: "https://chatgpt.com/images/",
         images: [
           {
             filePath: imagePath,
@@ -57,16 +61,20 @@ test("an MCP client can discover and call the image tools", async (t) => {
     ["check_chatgpt_image_browser", "generate_chatgpt_web_image"],
   );
 
-  const status = await client.callTool({ name: "check_chatgpt_image_browser", arguments: {} });
+  const status = await client.callTool({
+    name: "check_chatgpt_image_browser",
+    arguments: { surface: "images" },
+  });
   assert.equal(status.isError, undefined);
   assert.match(status.content[0].text, /"ready": true/);
 
   const result = await client.callTool({
     name: "generate_chatgpt_web_image",
-    arguments: { prompt: "draw a test image" },
+    arguments: { prompt: "draw a test image", surface: "images" },
   });
   assert.equal(result.isError, undefined);
   assert.equal(result.content[0].type, "text");
+  assert.match(result.content[0].text, /"surface": "images"/);
   assert.equal(result.content[1].type, "image");
   assert.equal(result.content[1].data, imageBytes.toString("base64"));
 });

@@ -1,13 +1,32 @@
 import { UserFacingError } from "./errors.js";
 
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
-const PROMPT_SELECTOR = [
-  "#prompt-textarea",
-  "[data-testid='prompt-textarea']",
-  "textarea[placeholder*='Message']",
-  "textarea[placeholder*='消息']",
-  "div[contenteditable='true'][role='textbox']",
-].join(", ");
+export const CHAT_SURFACE_SELECTORS = Object.freeze({
+  prompt: [
+    "#prompt-textarea",
+    "[data-testid='prompt-textarea']",
+    "textarea[placeholder*='Message']",
+    "textarea[placeholder*='消息']",
+    "div[contenteditable='true'][role='textbox']",
+  ].join(", "),
+  attach: [
+    "[data-testid='composer-plus-btn']",
+    "button[aria-label*='Attach']",
+    "button[aria-label*='上传']",
+    "button[aria-label*='添加']",
+  ].join(", "),
+  send: [
+    "[data-testid='send-button']",
+    "button[aria-label='Send prompt']",
+    "button[aria-label='发送提示']",
+    "button[aria-label='发送']",
+  ].join(", "),
+  generating: [
+    "[data-testid='stop-button']",
+    "button[aria-label*='Stop']",
+    "button[aria-label*='停止']",
+  ].join(", "),
+});
 
 export function compactImageSource(source) {
   if (source.length <= 500) {
@@ -49,8 +68,8 @@ async function listImageCandidates(page) {
   );
 }
 
-async function findPromptBox(page, timeoutMs = 20000) {
-  const promptBox = page.locator(PROMPT_SELECTOR).first();
+async function findPromptBox(page, selectors, timeoutMs = 20000) {
+  const promptBox = page.locator(selectors.prompt).first();
   try {
     await promptBox.waitFor({ state: "visible", timeout: timeoutMs });
     return promptBox;
@@ -63,17 +82,13 @@ async function findPromptBox(page, timeoutMs = 20000) {
   }
 }
 
-async function uploadSourceImages(page, sourceImages) {
+async function uploadSourceImages(page, sourceImages, selectors) {
   if (!sourceImages.length) {
     return;
   }
   let input = page.locator("input[type='file']").last();
   if ((await input.count()) === 0) {
-    const attach = page
-      .locator(
-        "[data-testid='composer-plus-btn'], button[aria-label*='Attach'], button[aria-label*='上传'], button[aria-label*='添加']",
-      )
-      .last();
+    const attach = page.locator(selectors.attach).last();
     if ((await attach.count()) > 0) {
       await attach.click();
     }
@@ -100,12 +115,8 @@ async function fillPrompt(page, promptBox, prompt) {
   }
 }
 
-async function submitPrompt(page) {
-  const sendButton = page
-    .locator(
-      "[data-testid='send-button'], button[aria-label='Send prompt'], button[aria-label='发送提示'], button[aria-label='发送']",
-    )
-    .last();
+async function submitPrompt(page, selectors) {
+  const sendButton = page.locator(selectors.send).last();
   if ((await sendButton.count()) > 0 && (await sendButton.isVisible().catch(() => false))) {
     await sendButton.click();
     return;
@@ -113,7 +124,7 @@ async function submitPrompt(page) {
   await page.keyboard.press("Enter");
 }
 
-async function waitForGeneratedImages(page, beforeKeys, timeoutMs, maxImages) {
+async function waitForGeneratedImages(page, beforeKeys, timeoutMs, maxImages, selectors) {
   const deadline = Date.now() + timeoutMs;
   let stableSignature = "";
   let stableSince = 0;
@@ -129,7 +140,7 @@ async function waitForGeneratedImages(page, beforeKeys, timeoutMs, maxImages) {
     }
 
     const generating = await page
-      .locator("[data-testid='stop-button'], button[aria-label*='Stop'], button[aria-label*='停止']")
+      .locator(selectors.generating)
       .count()
       .catch(() => 0);
     if (candidates.length && !generating && Date.now() - stableSince >= 4000) {
@@ -144,27 +155,29 @@ async function waitForGeneratedImages(page, beforeKeys, timeoutMs, maxImages) {
 }
 
 export class ChatGPTPage {
-  constructor(page, config) {
+  constructor(page, config, selectors = CHAT_SURFACE_SELECTORS) {
     this.page = page;
     this.config = config;
+    this.selectors = selectors;
   }
 
   async assertReady(timeoutMs = 20000) {
-    await findPromptBox(this.page, timeoutMs);
+    await findPromptBox(this.page, this.selectors, timeoutMs);
     return { ready: true, url: this.page.url() };
   }
 
   async generate(prompt, sourceImages) {
-    const promptBox = await findPromptBox(this.page);
-    await uploadSourceImages(this.page, sourceImages);
+    const promptBox = await findPromptBox(this.page, this.selectors);
+    await uploadSourceImages(this.page, sourceImages, this.selectors);
     const beforeKeys = new Set((await listImageCandidates(this.page)).map(candidateKey));
     await fillPrompt(this.page, promptBox, prompt);
-    await submitPrompt(this.page);
+    await submitPrompt(this.page, this.selectors);
     return waitForGeneratedImages(
       this.page,
       beforeKeys,
       this.config.timeoutMs,
       this.config.maxImages,
+      this.selectors,
     );
   }
 }

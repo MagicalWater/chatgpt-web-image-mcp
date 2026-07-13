@@ -1,7 +1,7 @@
 {
   "name": "chatgpt-web-image-mcp",
-  "version": "0.1.0",
-  "description": "Local MCP and CLI bridge that drives a logged-in ChatGPT web session to generate and retrieve images.",
+  "version": "0.2.0",
+  "description": "Local MCP and CLI bridge for generating and retrieving images through ChatGPT chat or Images web surfaces.",
   "type": "module",
   "license": "MIT",
   "bin": {

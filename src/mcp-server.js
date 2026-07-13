@@ -10,18 +10,25 @@ import { toMcpContent } from "./mcp-result.js";
 
 export function createServer(config = loadConfig(), dependencies = {}) {
   const generator = dependencies.generator || new ImageGenerator(config);
-  const server = new McpServer({ name: "chatgpt-web-image", version: "0.1.0" });
+  const server = new McpServer({ name: "chatgpt-web-image", version: "0.2.0" });
 
   server.registerTool(
     "check_chatgpt_image_browser",
     {
       title: "Check ChatGPT image browser",
       description: "Check whether the dedicated local Chrome profile is signed in and ready.",
-      inputSchema: {},
+      inputSchema: {
+        surface: z.enum(["chat", "images"]).optional().describe("ChatGPT web surface to check"),
+        chatgpt_url: z
+          .string()
+          .url()
+          .optional()
+          .describe("Optional HTTPS chatgpt.com URL override"),
+      },
     },
-    async () => {
+    async (input) => {
       try {
-        const status = await generator.check();
+        const status = await generator.check(input);
         return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
       } catch (error) {
         const safe = safeError(error);
@@ -48,6 +55,10 @@ export function createServer(config = loadConfig(), dependencies = {}) {
           .url()
           .optional()
           .describe("Optional HTTPS chatgpt.com conversation or project URL"),
+        surface: z
+          .enum(["chat", "images"])
+          .optional()
+          .describe("Use the regular chat/project composer or the dedicated Images composer"),
       },
     },
     async (input) => {

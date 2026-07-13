@@ -3,7 +3,14 @@ import { UserFacingError } from "./errors.js";
 export function parseCliArgs(argv) {
   const first = argv[0] || "help";
   const command = ["--help", "-h"].includes(first) ? "help" : first;
-  const result = { command, prompt: "", source_images: [], chatgpt_url: "", output_dir: "" };
+  const result = {
+    command,
+    prompt: "",
+    source_images: [],
+    chatgpt_url: "",
+    output_dir: "",
+    surface: "",
+  };
   for (let index = 1; index < argv.length; index += 1) {
     const key = argv[index];
     const value = argv[index + 1];
@@ -21,6 +28,12 @@ export function parseCliArgs(argv) {
       index += 1;
     } else if (key === "--output-dir") {
       result.output_dir = value || "";
+      index += 1;
+    } else if (key === "--surface") {
+      if (!value) {
+        throw new UserFacingError("--surface requires chat or images", "INVALID_ARGUMENT");
+      }
+      result.surface = value;
       index += 1;
     } else if (["--help", "-h"].includes(key)) {
       result.command = "help";

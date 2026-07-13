@@ -2,6 +2,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { UserFacingError } from "./errors.js";
+import {
+  defaultSurfaceUrl,
+  inferSurfaceFromUrl,
+  normalizeSurface,
+} from "./surface-config.js";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
@@ -99,12 +104,15 @@ export function loadConfig(env = process.env, options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const allowRemoteCdp = parseBoolean(env.CHATGPT_ALLOW_REMOTE_CDP, false);
   const root = path.join(homeDir, ".chatgpt-web-image-mcp");
+  const surface = env.CHATGPT_WEB_SURFACE
+    ? normalizeSurface(env.CHATGPT_WEB_SURFACE)
+    : inferSurfaceFromUrl(env.CHATGPT_WEB_URL, "chat");
 
   return {
     allowedInputDirs: parseAllowedInputDirs(env.CHATGPT_IMAGE_ALLOWED_INPUT_DIRS, homeDir),
     allowRemoteCdp,
     cdpUrl: validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp),
-    chatgptUrl: validateChatGPTUrl(env.CHATGPT_WEB_URL || "https://chatgpt.com/"),
+    chatgptUrl: validateChatGPTUrl(env.CHATGPT_WEB_URL || defaultSurfaceUrl(surface)),
     chromeChannel: env.CHATGPT_CHROME_CHANNEL || "chrome",
     chromeUserDataDir: path.resolve(
       expandHome(env.CHATGPT_CHROME_USER_DATA_DIR || path.join(root, "chrome-profile"), homeDir),
@@ -128,6 +136,7 @@ export function loadConfig(env = process.env, options = {}) {
     outputDir: path.resolve(
       expandHome(env.CHATGPT_IMAGE_OUTPUT_DIR || path.join(root, "outputs"), homeDir),
     ),
+    surface,
     timeoutMs: parseInteger(
       env.CHATGPT_IMAGE_TIMEOUT_MS,
       600000,
