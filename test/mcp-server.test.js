@@ -23,11 +23,13 @@ test("an MCP client can discover and call the image tools", async (t) => {
     async generate(input) {
       assert.equal(input.prompt, "draw a test image");
       assert.equal(input.surface, "images");
+      assert.equal(input.character_profile, "same character");
       return {
         ok: true,
         jobId: "job-test",
         surface: "images",
         chatgptUrl: "https://chatgpt.com/images/",
+        consistency: { character: true, style: false },
         images: [
           {
             filePath: imagePath,
@@ -38,6 +40,14 @@ test("an MCP client can discover and call the image tools", async (t) => {
             captureMethod: "test",
           },
         ],
+      };
+    },
+    async setupProject(input) {
+      assert.equal(input.project_name, "Image continuity");
+      return {
+        ok: true,
+        created: true,
+        projectUrl: "https://chatgpt.com/g/g-p-test/project",
       };
     },
     async close() {},
@@ -58,7 +68,11 @@ test("an MCP client can discover and call the image tools", async (t) => {
   const tools = await client.listTools();
   assert.deepEqual(
     tools.tools.map((tool) => tool.name).sort(),
-    ["check_chatgpt_image_browser", "generate_chatgpt_web_image"],
+    [
+      "check_chatgpt_image_browser",
+      "generate_chatgpt_web_image",
+      "setup_chatgpt_image_project",
+    ],
   );
 
   const status = await client.callTool({
@@ -68,13 +82,25 @@ test("an MCP client can discover and call the image tools", async (t) => {
   assert.equal(status.isError, undefined);
   assert.match(status.content[0].text, /"ready": true/);
 
+  const setup = await client.callTool({
+    name: "setup_chatgpt_image_project",
+    arguments: { project_name: "Image continuity" },
+  });
+  assert.equal(setup.isError, undefined);
+  assert.match(setup.content[0].text, /g-p-test/);
+
   const result = await client.callTool({
     name: "generate_chatgpt_web_image",
-    arguments: { prompt: "draw a test image", surface: "images" },
+    arguments: {
+      prompt: "draw a test image",
+      surface: "images",
+      character_profile: "same character",
+    },
   });
   assert.equal(result.isError, undefined);
   assert.equal(result.content[0].type, "text");
   assert.match(result.content[0].text, /"surface": "images"/);
+  assert.match(result.content[0].text, /"character": true/);
   assert.equal(result.content[1].type, "image");
   assert.equal(result.content[1].data, imageBytes.toString("base64"));
 });

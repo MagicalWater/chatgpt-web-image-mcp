@@ -36,7 +36,11 @@ export function resolveSurfaceTarget(config, input = {}) {
   const requestedSurface = input.surface
     ? normalizeSurface(input.surface)
     : inferSurfaceFromUrl(input.chatgpt_url, config.surface);
-  const switchedSurface = Boolean(input.surface) && requestedSurface !== config.surface;
-  const url = input.chatgpt_url || (switchedSurface ? defaultSurfaceUrl(requestedSurface) : config.chatgptUrl);
+  const switchedSurface = requestedSurface !== config.surface;
+  const switchedUrl =
+    requestedSurface === "chat" && config.projectUrl
+      ? config.projectUrl
+      : defaultSurfaceUrl(requestedSurface);
+  const url = input.chatgpt_url || (switchedSurface ? switchedUrl : config.chatgptUrl);
   return { surface: requestedSurface, url };
 }

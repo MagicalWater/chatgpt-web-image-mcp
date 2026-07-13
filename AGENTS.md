@@ -15,6 +15,7 @@ This repository contains only a local ChatGPT web image automation adapter. Keep
 - Return sanitized user-facing errors, never stack traces, environment dumps, or browser session data.
 - Keep browser operations serial because one profile has one shared composer state.
 - Keep `/images`-specific selectors in `src/images-page.js`; shared generation and capture behavior belongs in the base page adapter.
+- Keep ChatGPT Projects creation/settings selectors in `src/project-page.js`; persist only non-secret project/profile settings in the local settings file.
 
 ## Verification
 

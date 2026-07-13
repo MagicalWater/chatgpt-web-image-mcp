@@ -7,6 +7,9 @@ import {
   inferSurfaceFromUrl,
   normalizeSurface,
 } from "./surface-config.js";
+import { normalizeProfile } from "./consistency-profiles.js";
+import { readLocalSettings } from "./local-settings.js";
+import { isChatGPTProjectUrl } from "./project-page.js";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
@@ -67,6 +70,17 @@ export function validateChatGPTUrl(value) {
   return url.href;
 }
 
+export function validateChatGPTProjectUrl(value) {
+  const url = validateChatGPTUrl(value);
+  if (!isChatGPTProjectUrl(url)) {
+    throw new UserFacingError(
+      "The fixed project URL must be a ChatGPT project home URL",
+      "INVALID_PROJECT_URL",
+    );
+  }
+  return url;
+}
+
 export function validateCdpUrl(value, allowRemote = false) {
   if (!value) {
     return "";
@@ -104,15 +118,26 @@ export function loadConfig(env = process.env, options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const allowRemoteCdp = parseBoolean(env.CHATGPT_ALLOW_REMOTE_CDP, false);
   const root = path.join(homeDir, ".chatgpt-web-image-mcp");
+  const settingsFile = path.resolve(
+    expandHome(env.CHATGPT_SETTINGS_FILE || path.join(root, "settings.json"), homeDir),
+  );
+  const localSettings = options.localSettings || readLocalSettings(settingsFile);
+  const projectUrlValue = env.CHATGPT_PROJECT_URL || localSettings.project_url || "";
+  const projectUrl = projectUrlValue ? validateChatGPTProjectUrl(projectUrlValue) : "";
   const surface = env.CHATGPT_WEB_SURFACE
     ? normalizeSurface(env.CHATGPT_WEB_SURFACE)
     : inferSurfaceFromUrl(env.CHATGPT_WEB_URL, "chat");
+  const defaultUrl = surface === "chat" && projectUrl ? projectUrl : defaultSurfaceUrl(surface);
 
   return {
     allowedInputDirs: parseAllowedInputDirs(env.CHATGPT_IMAGE_ALLOWED_INPUT_DIRS, homeDir),
     allowRemoteCdp,
     cdpUrl: validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp),
-    chatgptUrl: validateChatGPTUrl(env.CHATGPT_WEB_URL || defaultSurfaceUrl(surface)),
+    characterProfile: normalizeProfile(
+      env.CHATGPT_CHARACTER_PROFILE ?? localSettings.character_profile,
+      "CHATGPT_CHARACTER_PROFILE",
+    ),
+    chatgptUrl: validateChatGPTUrl(env.CHATGPT_WEB_URL || defaultUrl),
     chromeChannel: env.CHATGPT_CHROME_CHANNEL || "chrome",
     chromeUserDataDir: path.resolve(
       expandHome(env.CHATGPT_CHROME_USER_DATA_DIR || path.join(root, "chrome-profile"), homeDir),
@@ -135,6 +160,15 @@ export function loadConfig(env = process.env, options = {}) {
     ),
     outputDir: path.resolve(
       expandHome(env.CHATGPT_IMAGE_OUTPUT_DIR || path.join(root, "outputs"), homeDir),
+    ),
+    localSettings,
+    projectName:
+      String(env.CHATGPT_PROJECT_NAME || localSettings.project_name || "ChatGPT Web Image MCP").trim(),
+    projectUrl,
+    settingsFile,
+    styleProfile: normalizeProfile(
+      env.CHATGPT_STYLE_PROFILE ?? localSettings.style_profile,
+      "CHATGPT_STYLE_PROFILE",
     ),
     surface,
     timeoutMs: parseInteger(

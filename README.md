@@ -1,6 +1,6 @@
 # ChatGPT Web Image MCP
 
-一个独立的本地 MCP/CLI 工具：复用专用 Chrome profile 中已经登录的 ChatGPT 网页会话，通过普通聊天/项目输入框或 `https://chatgpt.com/images/` 专用输入框提交生图、改图提示词，等待网页结果，并把图片保存到本机后作为 MCP `image` 内容返回给调用它的 AI。
+一个独立的本地 MCP/CLI 工具：复用专用 Chrome profile 中已经登录的 ChatGPT 网页会话，通过固定 ChatGPT 项目或 `https://chatgpt.com/images/` 专用输入框提交生图、改图提示词，等待网页结果，并把图片保存到本机后作为 MCP `image` 内容返回给调用它的 AI。它支持可复用的人物档案和画风档案，并能自动创建、配置和记住一个固定项目 URL。
 
 它不依赖 ComfyUI，不包含 workflow、模型权重、视频链路、OpenAI API key、Gateway、隧道或公网 HTTP 服务。
 
@@ -17,7 +17,7 @@
 generate_chatgpt_web_image
         |
         v
-专用 Chrome profile -> chat surface 或 images surface -> 图片生成结果
+专用 Chrome profile -> 固定项目/chat surface 或 images surface -> 图片生成结果
         |
         v
 本机 outputs 目录 + MCP image content
@@ -62,13 +62,40 @@ npm run login
 node bin/chatgpt-web-image.js check
 ```
 
+## 创建固定生图项目
+
+首次登录后运行：
+
+```bash
+node bin/chatgpt-web-image.js setup-project \
+  --project-name "ChatGPT Web Image MCP" \
+  --character "同一名成年女性，鹅蛋脸，黑色齐肩直发，体型和五官比例保持稳定" \
+  --style "电影感东方时尚摄影，克制配色，柔和方向光，真实皮肤质感"
+```
+
+命令会通过当前登录的 ChatGPT 页面执行以下操作：
+
+1. 没有固定项目时，自动创建项目；已经配置时，默认复用原项目。
+2. 写入人物与画风一致性的项目指令。
+3. 把项目 URL、项目名和默认档案保存到本机 `~/.chatgpt-web-image-mcp/settings.json`。
+4. 后续 `chat` 模式自动使用该项目 URL，不需要每次传 `chatgpt_url`。
+
+本地设置文件权限会收紧为仅当前用户可读写。它不包含 Cookie、token 或 Chrome profile。需要采用已有项目时：
+
+```bash
+node bin/chatgpt-web-image.js setup-project \
+  --project-url "https://chatgpt.com/g/g-p-YOUR_PROJECT/project"
+```
+
+只有明确使用 `--force-new` 才会另建项目，避免 AI 重复创建项目。
+
 ## 选择网页入口
 
 插件提供两个可选 surface：
 
 | surface | 默认地址 | 适用场景 |
 |---|---|---|
-| `chat` | `https://chatgpt.com/` | 普通聊天、固定对话或 ChatGPT 项目；适合保留上下文和连续修改 |
+| `chat` | 固定项目 URL，未配置时为 `https://chatgpt.com/` | 固定人物、画风和连续修改 |
 | `images` | `https://chatgpt.com/images/` | Images 2.0 专用输入框；适合独立生图和集中查看图片 |
 
 默认是 `chat`。通过环境变量改变整个 MCP 进程的默认值：
@@ -77,7 +104,7 @@ node bin/chatgpt-web-image.js check
 export CHATGPT_WEB_SURFACE=images
 ```
 
-也可以在每次 CLI/MCP 调用时传 `surface` 覆盖默认值。单独传入 `/images` URL 时会自动推断 `images`；同时传入两者时，`surface` 决定页面适配器，`chatgpt_url` 决定实际地址。例如固定 ChatGPT 项目应使用 `surface=chat` 加项目 URL。
+也可以在每次 CLI/MCP 调用时传 `surface` 覆盖默认值。单独传入 `/images` URL 时会自动推断 `images`；同时传入两者时，`surface` 决定页面适配器，`chatgpt_url` 决定实际地址。配置固定项目后，从 `images` 切回 `chat` 也会自动回到该项目。
 
 ## CLI 使用
 
@@ -104,6 +131,24 @@ node bin/chatgpt-web-image.js generate \
   --chatgpt-url "https://chatgpt.com/g/YOUR_PROJECT/project" \
   --prompt "沿用项目里的人物设定，生成下一张场景图"
 ```
+
+使用默认人物和画风档案：
+
+```bash
+node bin/chatgpt-web-image.js generate \
+  --prompt "人物撑伞走过雨后的江南石桥，横向构图"
+```
+
+为单次任务覆盖档案：
+
+```bash
+node bin/chatgpt-web-image.js generate \
+  --character "同一名成年男性，短发，圆框眼镜，深灰长风衣" \
+  --style "黑白木刻版画，高反差，粗线条" \
+  --prompt "站在旧火车站月台"
+```
+
+通过 `--character ""` 或 `--style ""` 可只关闭对应默认档案；`--no-consistency` 会为本次调用关闭两项。
 
 输出位于 `~/.chatgpt-web-image-mcp/outputs/<job>/`，CLI 会返回 JSON 文件信息。
 
@@ -142,7 +187,8 @@ codex mcp add chatgpt-web-image -- \
       "env": {
         "CHATGPT_CHROME_USER_DATA_DIR": "/ABSOLUTE/PATH/TO/DEDICATED/chrome-profile",
         "CHATGPT_IMAGE_OUTPUT_DIR": "/ABSOLUTE/PATH/TO/outputs",
-        "CHATGPT_WEB_SURFACE": "chat"
+        "CHATGPT_WEB_SURFACE": "chat",
+        "CHATGPT_SETTINGS_FILE": "/ABSOLUTE/PATH/TO/settings.json"
       }
     }
   }
@@ -169,6 +215,20 @@ codex mcp add chatgpt-web-image -- \
 
 ## MCP 工具
 
+### `setup_chatgpt_image_project`
+
+自动创建或更新固定项目，并保存默认一致性档案。默认复用已保存的 URL：
+
+```json
+{
+  "project_name": "ChatGPT Web Image MCP",
+  "character_profile": "同一名成年女性，黑色齐肩直发，五官和体型保持稳定",
+  "style_profile": "电影感东方时尚摄影，柔和方向光，克制配色"
+}
+```
+
+可传 `project_url` 采用已有项目。仅在确实要创建另一个项目时设置 `force_new: true`。
+
 ### `check_chatgpt_image_browser`
 
 检查专用 Chrome profile 是否能打开 ChatGPT 且已出现对应输入框。可选传入 `surface` 和 `chatgpt_url`，用于分别检查普通聊天、项目或 `/images`。
@@ -180,20 +240,26 @@ codex mcp add chatgpt-web-image -- \
 ```json
 {
   "prompt": "一张白底产品摄影，柔和棚拍光，无文字",
-  "surface": "images",
+  "surface": "chat",
+  "character_profile": "同一名成年女性，黑色齐肩直发，五官和体型保持稳定",
+  "style_profile": "电影感东方时尚摄影，柔和方向光，克制配色",
+  "use_consistency": true,
   "source_images": [],
-  "chatgpt_url": "https://chatgpt.com/images/"
+  "chatgpt_url": "https://chatgpt.com/g/g-p-YOUR_PROJECT/project"
 }
 ```
 
 - `prompt`：必填，最多 12000 字符。
 - `surface`：可选，`chat` 或 `images`；省略时使用 `CHATGPT_WEB_SURFACE`。
+- `character_profile`：可选人物身份约束；省略时使用固定项目的默认档案，空字符串只关闭人物档案。
+- `style_profile`：可选画风约束；省略时使用固定项目的默认档案，空字符串只关闭画风档案。
+- `use_consistency`：可选；设为 `false` 时本次调用关闭人物与画风档案。
 - `source_images`：可选，最多 8 个本地图片路径，必须位于输入白名单。
 - `chatgpt_url`：可选，只允许无凭据的 HTTPS `chatgpt.com` 页面；显式 URL 优先于 surface 默认地址。
 
 工具按顺序返回：
 
-1. JSON 摘要，包括 `job_id`、`surface`、实际 URL、文件路径、尺寸、MIME 和捕获方式。
+1. JSON 摘要，包括 `job_id`、`surface`、实际 URL、一致性档案启用状态、文件路径、尺寸、MIME 和捕获方式。
 2. 一个或多个 MCP `image` 内容块，AI 客户端可直接查看和继续使用。
 
 同一个 MCP 进程中的调用会严格串行，避免多个请求同时操作一个输入框。
@@ -227,6 +293,7 @@ export CHATGPT_CDP_URL=http://127.0.0.1:9222
 - 只提供本地 stdio MCP，不监听公网端口。
 - 只允许导航到 `https://chatgpt.com` 及其子域。
 - 不读取或输出 Cookie、Local Storage、账号 token、环境变量或 profile 内容。
+- 固定项目 URL 和人物/画风档案只写入本机设置文件，不进入 npm 包；该文件不保存浏览器凭据。
 - 不复制用户日常 Chrome profile，默认使用独立 profile。
 - 图片编辑的本地输入目录默认是空白名单。
 - 单图默认最大 20 MiB，超限时尝试可见区域截图，仍超限则失败。
@@ -254,6 +321,8 @@ node bin/chatgpt-web-image.js generate --surface images --prompt "生成一个�
 
 - ChatGPT 页面 DOM 会变化，输入框、发送按钮或图片结构改版后需要更新 selector。
 - `/images` 页面已有历史图库，插件会在提交前记录现有图片，只捕获提交后出现的新图片。
+- 文字档案和项目上下文能提高连续性，但网页生图不提供身份锁定保证；要求高一致性时，应在允许目录中提供同一张人物参考图，并在连续请求中复用。
+- ChatGPT Projects 的按钮和字段会随网页版本或语言变化；当前自动创建支持中文和英文界面。
 - 验证码、二次登录、地区限制、账号额度和内容安全拦截需要操作者在可见浏览器中处理。
 - 网页端不提供稳定的模型响应元数据，本工具不会声称验证了底层具体模型。
 - CDP 模式不会主动关闭操作者的 Chrome；专用 profile 模式在 CLI/MCP 正常退出时会关闭自己启动的窗口。

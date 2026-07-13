@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { UserFacingError } from "./errors.js";
 
-const MAX_PROMPT_LENGTH = 12000;
+export const MAX_PROMPT_LENGTH = 12000;
 
 export function normalizePrompt(value) {
   if (typeof value !== "string" || !value.trim()) {

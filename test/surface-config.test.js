@@ -43,6 +43,21 @@ test("a per-call surface switch receives that surface default URL", () => {
   });
 });
 
+test("switching from Images to chat uses the configured fixed project", () => {
+  const projectUrl = "https://chatgpt.com/g/g-p-fixed/project";
+  assert.deepEqual(
+    resolveSurfaceTarget(
+      {
+        surface: "images",
+        chatgptUrl: "https://chatgpt.com/images/",
+        projectUrl,
+      },
+      { surface: "chat" },
+    ),
+    { surface: "chat", url: projectUrl },
+  );
+});
+
 test("the Images surface uses its own page adapter and attachment selector", () => {
   assert.ok(createSurfaceAdapter("chat", {}, {}) instanceof ChatGPTPage);
   assert.ok(createSurfaceAdapter("images", {}, {}) instanceof ImagesPage);

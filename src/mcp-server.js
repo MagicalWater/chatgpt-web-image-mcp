@@ -10,7 +10,7 @@ import { toMcpContent } from "./mcp-result.js";
 
 export function createServer(config = loadConfig(), dependencies = {}) {
   const generator = dependencies.generator || new ImageGenerator(config);
-  const server = new McpServer({ name: "chatgpt-web-image", version: "0.2.0" });
+  const server = new McpServer({ name: "chatgpt-web-image", version: "0.3.0" });
 
   server.registerTool(
     "check_chatgpt_image_browser",
@@ -30,6 +30,46 @@ export function createServer(config = loadConfig(), dependencies = {}) {
       try {
         const status = await generator.check(input);
         return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
+      } catch (error) {
+        const safe = safeError(error);
+        return { isError: true, content: [{ type: "text", text: JSON.stringify(safe) }] };
+      }
+    },
+  );
+
+  server.registerTool(
+    "setup_chatgpt_image_project",
+    {
+      title: "Set up the fixed ChatGPT image project",
+      description:
+        "Create or reconfigure one fixed ChatGPT project for image generation, save its URL locally, and set default character/style consistency profiles. Reuses the saved project unless force_new is true.",
+      inputSchema: {
+        project_name: z.string().min(1).max(80).optional(),
+        project_url: z
+          .string()
+          .url()
+          .optional()
+          .describe("Optional existing ChatGPT project home URL to adopt"),
+        character_profile: z
+          .string()
+          .max(4000)
+          .optional()
+          .describe("Default reusable character identity description"),
+        style_profile: z
+          .string()
+          .max(4000)
+          .optional()
+          .describe("Default reusable visual style description"),
+        force_new: z
+          .boolean()
+          .optional()
+          .describe("Create another project instead of reusing the configured URL"),
+      },
+    },
+    async (input) => {
+      try {
+        const result = await generator.setupProject(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         const safe = safeError(error);
         return { isError: true, content: [{ type: "text", text: JSON.stringify(safe) }] };
@@ -59,6 +99,20 @@ export function createServer(config = loadConfig(), dependencies = {}) {
           .enum(["chat", "images"])
           .optional()
           .describe("Use the regular chat/project composer or the dedicated Images composer"),
+        character_profile: z
+          .string()
+          .max(4000)
+          .optional()
+          .describe("Character identity constraints; omitted uses the configured default"),
+        style_profile: z
+          .string()
+          .max(4000)
+          .optional()
+          .describe("Visual style constraints; omitted uses the configured default"),
+        use_consistency: z
+          .boolean()
+          .optional()
+          .describe("Set false to ignore both configured consistency profiles for this call"),
       },
     },
     async (input) => {

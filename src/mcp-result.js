@@ -6,6 +6,7 @@ export async function toMcpContent(result, maxBytes) {
     job_id: result.jobId,
     surface: result.surface,
     chatgpt_url: result.chatgptUrl,
+    consistency: result.consistency,
     image_count: result.images.length,
     images: result.images.map((image) => ({
       path: image.filePath,

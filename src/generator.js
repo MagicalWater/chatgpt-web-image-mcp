@@ -3,11 +3,13 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { BrowserSession } from "./browser-session.js";
+import { composeGenerationPrompt, resolveConsistencyProfiles } from "./consistency-profiles.js";
 import { validateChatGPTUrl } from "./config.js";
 import { captureImages } from "./image-capture.js";
+import { ProjectManager } from "./project-manager.js";
 import { createSurfaceAdapter } from "./surface-adapters.js";
 import { resolveSurfaceTarget } from "./surface-config.js";
-import { normalizePrompt, normalizeSourceImages } from "./validation.js";
+import { normalizeSourceImages } from "./validation.js";
 
 function jobDirectoryName(jobId) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -19,6 +21,8 @@ export class ImageGenerator {
     this.config = config;
     this.session = dependencies.session || new BrowserSession(config);
     this.captureImages = dependencies.captureImages || captureImages;
+    this.projectManager =
+      dependencies.projectManager || new ProjectManager(config, this.session, dependencies.projectManagerDependencies);
     this.tail = Promise.resolve();
   }
 
@@ -40,6 +44,12 @@ export class ImageGenerator {
     return task;
   }
 
+  setupProject(input = {}) {
+    const task = this.tail.then(() => this.projectManager.setup(input));
+    this.tail = task.catch(() => {});
+    return task;
+  }
+
   async runCheck(input = {}, timeoutMs = 20000) {
     const target = resolveSurfaceTarget(this.config, input);
     const chatgptUrl = validateChatGPTUrl(target.url);
@@ -54,7 +64,8 @@ export class ImageGenerator {
   }
 
   async runGeneration(input) {
-    const prompt = normalizePrompt(input?.prompt);
+    const profiles = resolveConsistencyProfiles(this.config, input);
+    const prompt = composeGenerationPrompt(input?.prompt, profiles);
     const sourceImages = await normalizeSourceImages(input?.source_images, this.config);
     const target = resolveSurfaceTarget(this.config, input);
     const chatgptUrl = validateChatGPTUrl(target.url);
@@ -74,6 +85,10 @@ export class ImageGenerator {
       surface: target.surface,
       outputDir,
       images,
+      consistency: {
+        character: Boolean(profiles.characterProfile),
+        style: Boolean(profiles.styleProfile),
+      },
     };
   }
 
