@@ -1,0 +1,12 @@
+node_modules/
+outputs/
+.env
+.DS_Store
+*.log
+*.tgz
+coverage/
+chatgpt-web-image-mcp-*.zip
+
+# A browser profile contains login cookies and must never be committed.
+chrome-profile/
+.chatgpt-web-image-mcp/

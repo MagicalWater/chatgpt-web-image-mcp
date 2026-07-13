@@ -1,0 +1,33 @@
+{
+  "name": "chatgpt-web-image-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP and CLI bridge that drives a logged-in ChatGPT web session to generate and retrieve images.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "chatgpt-web-image-mcp": "./src/mcp-server.js",
+    "chatgpt-web-image": "./bin/chatgpt-web-image.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    ".env.example",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "check": "node --check bin/chatgpt-web-image.js && node --check src/*.js",
+    "login": "node bin/chatgpt-web-image.js login",
+    "test": "node --test",
+    "prepack": "npm run check && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "playwright-core": "^1.61.1",
+    "zod": "^3.25.76"
+  }
+}
