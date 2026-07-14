@@ -32,8 +32,9 @@ export function persistentContextOptions(config) {
 }
 
 export class BrowserSession {
-  constructor(config) {
+  constructor(config, dependencies = {}) {
     this.config = config;
+    this.chromium = dependencies.chromium || chromium;
     this.browser = null;
     this.context = null;
     this.ownsContext = false;
@@ -45,7 +46,7 @@ export class BrowserSession {
     }
     try {
       if (this.config.cdpUrl) {
-        this.browser = await chromium.connectOverCDP(this.config.cdpUrl);
+        this.browser = await this.chromium.connectOverCDP(this.config.cdpUrl);
         this.context = this.browser.contexts()[0];
         if (!this.context) {
           throw new UserFacingError(
@@ -57,7 +58,7 @@ export class BrowserSession {
       }
 
       await fs.mkdir(this.config.chromeUserDataDir, { recursive: true, mode: 0o700 });
-      this.context = await chromium.launchPersistentContext(
+      this.context = await this.chromium.launchPersistentContext(
         this.config.chromeUserDataDir,
         persistentContextOptions(this.config),
       );

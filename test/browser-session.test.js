@@ -69,3 +69,28 @@ test("CDP mode reuses an exact target tab without opening another tab", async ()
   assert.equal(page, target);
   assert.deepEqual(target.navigations, []);
 });
+
+test("CDP failure never falls back to launching a managed profile", async () => {
+  let launchCalls = 0;
+  const session = new BrowserSession(
+    { cdpUrl: "http://127.0.0.1:9222" },
+    {
+      chromium: {
+        async connectOverCDP() {
+          throw new Error("connection refused");
+        },
+        async launchPersistentContext() {
+          launchCalls += 1;
+          assert.fail("CDP mode must not launch a managed Chrome profile");
+        },
+      },
+    },
+  );
+
+  await assert.rejects(
+    session.getContext(),
+    (error) => error?.code === "CDP_UNREACHABLE",
+  );
+  assert.equal(launchCalls, 0);
+  assert.equal(session.ownsContext, false);
+});

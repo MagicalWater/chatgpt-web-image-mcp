@@ -317,6 +317,10 @@ CHATGPT_SETTINGS_FILE = "/ABSOLUTE/PATH/TO/settings.json"
 CHATGPT_WEB_SURFACE = "chat"
 ```
 
+新增或修改 MCP 的环境变量后，需要重启 Codex 应用，使已存活的 stdio
+server 进程退出。旧进程不会动态获得新的 `CHATGPT_CDP_URL`；本工具在
+新进程的 CDP 连接失败时会直接返回 `CDP_UNREACHABLE`，绝不回退启动另一个 profile。
+
 `CHATGPT_CDP_URL` 与 `CHATGPT_CHROME_USER_DATA_DIR` 二选一；CDP 模式下后者不会被使用。默认只允许 loopback CDP。远程 CDP 等同于远程浏览器控制，不应直接暴露到公网。
 
 ## 安全边界
