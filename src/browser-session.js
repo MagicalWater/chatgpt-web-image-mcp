@@ -13,6 +13,14 @@ function isChatGPTPage(page) {
   }
 }
 
+function isTargetPage(page, targetUrl) {
+  try {
+    return new URL(page.url()).href === new URL(targetUrl).href;
+  } catch {
+    return false;
+  }
+}
+
 export function persistentContextOptions(config) {
   return {
     acceptDownloads: true,
@@ -59,6 +67,13 @@ export class BrowserSession {
       if (error instanceof UserFacingError) {
         throw error;
       }
+      if (this.config.cdpUrl) {
+        throw new UserFacingError(
+          "Could not connect to the configured Chrome debugging endpoint. Start Chrome with CDP enabled and retry.",
+          "CDP_UNREACHABLE",
+          { cause: error },
+        );
+      }
       throw new UserFacingError(
         "Could not open the dedicated Chrome session. Run `chatgpt-web-image login` locally.",
         "BROWSER_START_FAILED",
@@ -70,7 +85,14 @@ export class BrowserSession {
   async getPage(targetUrl) {
     const context = await this.getContext();
     const pages = context.pages();
-    const page = pages.find(isChatGPTPage) || pages[0] || (await context.newPage());
+    const exactTarget = pages.find((page) => isTargetPage(page, targetUrl));
+    // A CDP context belongs to the operator. Reuse only the exact requested
+    // ChatGPT page; otherwise open a new tab so normal browsing is untouched.
+    const page =
+      exactTarget ||
+      (this.config.cdpUrl
+        ? await context.newPage()
+        : pages.find(isChatGPTPage) || pages[0] || (await context.newPage()));
     if (page.url() !== targetUrl) {
       try {
         await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
