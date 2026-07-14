@@ -13,6 +13,16 @@ function isChatGPTPage(page) {
   }
 }
 
+export function persistentContextOptions(config) {
+  return {
+    acceptDownloads: true,
+    channel: config.chromeChannel,
+    chromiumSandbox: true,
+    headless: config.headless,
+    viewport: { width: 1440, height: 1100 },
+  };
+}
+
 export class BrowserSession {
   constructor(config) {
     this.config = config;
@@ -39,12 +49,10 @@ export class BrowserSession {
       }
 
       await fs.mkdir(this.config.chromeUserDataDir, { recursive: true, mode: 0o700 });
-      this.context = await chromium.launchPersistentContext(this.config.chromeUserDataDir, {
-        acceptDownloads: true,
-        channel: this.config.chromeChannel,
-        headless: this.config.headless,
-        viewport: { width: 1440, height: 1100 },
-      });
+      this.context = await chromium.launchPersistentContext(
+        this.config.chromeUserDataDir,
+        persistentContextOptions(this.config),
+      );
       this.ownsContext = true;
       return this.context;
     } catch (error) {

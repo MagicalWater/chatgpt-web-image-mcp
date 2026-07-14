@@ -3,6 +3,7 @@
 This tool controls a signed-in browser and therefore has the same practical access as the operator at that browser window.
 
 - Use a dedicated Chrome profile. Never point it at your normal browsing profile.
+- The managed Chrome process explicitly enables the Chromium sandbox and must not be launched with `--no-sandbox`.
 - Never commit or share the profile directory. It contains session credentials.
 - Keep the MCP transport local (`stdio`). Do not expose it as an unauthenticated remote service.
 - Local source-image upload is disabled until `CHATGPT_IMAGE_ALLOWED_INPUT_DIRS` is configured. Use the narrowest possible roots.

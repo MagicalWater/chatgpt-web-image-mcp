@@ -291,6 +291,7 @@ export CHATGPT_CDP_URL=http://127.0.0.1:9222
 ## 安全边界
 
 - 只提供本地 stdio MCP，不监听公网端口。
+- 自行启动的 Chrome 显式开启 Chromium sandbox，不使用 `--no-sandbox`；否则 Google/OpenAI 登录可能拒绝该浏览器。
 - 只允许导航到 `https://chatgpt.com` 及其子域。
 - 不读取或输出 Cookie、Local Storage、账号 token、环境变量或 profile 内容。
 - 固定项目 URL 和人物/画风档案只写入本机设置文件，不进入 npm 包；该文件不保存浏览器凭据。
