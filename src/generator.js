@@ -38,12 +38,6 @@ export class ImageGenerator {
     return task;
   }
 
-  login(input = {}) {
-    const task = this.tail.then(() => this.runCheck(input, this.config.timeoutMs));
-    this.tail = task.catch(() => {});
-    return task;
-  }
-
   setupProject(input = {}) {
     const task = this.tail.then(() => this.projectManager.setup(input));
     this.tail = task.catch(() => {});

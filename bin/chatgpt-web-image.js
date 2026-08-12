@@ -5,6 +5,8 @@ import { loadConfig } from "../src/config.js";
 import { parseCliArgs } from "../src/cli-args.js";
 import { safeError, UserFacingError } from "../src/errors.js";
 import { ImageGenerator } from "../src/generator.js";
+import { launchNativeChromeForLogin } from "../src/native-login.js";
+import { resolveSurfaceTarget } from "../src/surface-config.js";
 
 const HELP = `chatgpt-web-image
 
@@ -32,14 +34,21 @@ Options:
   -h, --help              Show this help
 `;
 
-async function runLogin(generator, args) {
-  process.stderr.write(
-    "A dedicated Chrome profile is open. Sign in to ChatGPT in that window; this command will continue when the prompt box is ready.\n",
-  );
-  const status = await generator.login({
+async function runLogin(generator, config, args) {
+  const input = {
     chatgpt_url: args.chatgpt_url || undefined,
     surface: args.surface || undefined,
+  };
+  const target = resolveSurfaceTarget(config, input);
+  process.stderr.write(
+    "Opening a native Chrome window with the dedicated profile. Sign in to ChatGPT, then close that dedicated Chrome window to continue verification.\n",
+  );
+  await launchNativeChromeForLogin({
+    chromeUserDataDir: config.chromeUserDataDir,
+    chatgptUrl: target.url,
   });
+  process.stderr.write("Dedicated Chrome closed. Verifying the persisted ChatGPT session...\n");
+  const status = await generator.check(input);
   process.stdout.write(`${JSON.stringify({ ok: true, ...status }, null, 2)}\n`);
 }
 
@@ -57,7 +66,7 @@ async function main() {
   const generator = new ImageGenerator(config);
   try {
     if (args.command === "login") {
-      await runLogin(generator, args);
+      await runLogin(generator, config, args);
       return;
     }
     if (args.command === "check") {

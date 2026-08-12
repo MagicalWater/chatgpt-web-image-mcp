@@ -1,7 +1,13 @@
 import { UserFacingError } from "./errors.js";
 
+export function asAutomationPhaseError(error, code, message) {
+  if (error instanceof UserFacingError) {
+    return error;
+  }
+  return new UserFacingError(message, code, { cause: error });
+}
+
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
-export const LOGIN_SELECTOR = "[data-testid='login-button']";
 export const CHAT_SURFACE_SELECTORS = Object.freeze({
   prompt: [
     "#prompt-textarea",
@@ -52,8 +58,8 @@ export function diffCandidates(beforeKeys, candidates) {
   });
 }
 
-async function listImageCandidates(page) {
-  const rows = await page.locator(IMAGE_SELECTOR).evaluateAll((images) =>
+async function listImageCandidates(page, selector = IMAGE_SELECTOR) {
+  const rows = await page.locator(selector).evaluateAll((images) =>
     images.map((image) => {
       const rect = image.getBoundingClientRect();
       return {
@@ -83,20 +89,30 @@ async function findPromptBox(page, selectors, timeoutMs = 20000) {
   }
 }
 
-async function waitForAuthenticatedSession(page, timeoutMs = 20000) {
-  const loginButton = page.locator(LOGIN_SELECTOR).first();
-  if ((await loginButton.count()) === 0 || !(await loginButton.isVisible().catch(() => false))) {
-    return;
-  }
-  try {
-    await loginButton.waitFor({ state: "hidden", timeout: timeoutMs });
-  } catch (error) {
-    throw new UserFacingError(
-      "The dedicated Chrome profile is not signed in to ChatGPT.",
-      "CHATGPT_LOGIN_REQUIRED",
-      { cause: error },
-    );
-  }
+async function hasVisibleGuestAuthControl(page) {
+  return page.evaluate(() => {
+    const guestLabels = new Set([
+      "log in",
+      "sign up",
+      "登入",
+      "登录",
+      "免費註冊",
+      "免费注册",
+      "註冊",
+      "注册",
+    ]);
+    const normalize = (value) => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+    return Array.from(document.querySelectorAll("a, button")).some((element) => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return false;
+      }
+      return (
+        guestLabels.has(normalize(element.textContent)) ||
+        guestLabels.has(normalize(element.getAttribute("aria-label")))
+      );
+    });
+  });
 }
 
 async function uploadSourceImages(page, sourceImages, selectors) {
@@ -132,38 +148,94 @@ async function fillPrompt(page, promptBox, prompt) {
   }
 }
 
-async function submitPrompt(page, selectors) {
+async function promptBoxText(promptBox) {
+  if (!promptBox) {
+    return null;
+  }
+  return promptBox
+    .evaluate((element) => {
+      if ("value" in element) {
+        return String(element.value || "").trim();
+      }
+      return String(element.textContent || "").trim();
+    })
+    .catch(() => null);
+}
+
+export async function submitPrompt(page, selectors, promptBox = null) {
+  const beforeUrl = page.url();
   const sendButton = page.locator(selectors.send).last();
   if ((await sendButton.count()) > 0 && (await sendButton.isVisible().catch(() => false))) {
-    await sendButton.click();
-    return;
+    try {
+      await sendButton.click({ timeout: 5000 });
+      return;
+    } catch {
+      await page.waitForTimeout(250).catch(() => {});
+      const generating = await page
+        .locator(selectors.generating)
+        .count()
+        .catch(() => 0);
+      const afterUrl = page.url();
+      const remainingPrompt = await promptBoxText(promptBox);
+      if (generating > 0 || afterUrl !== beforeUrl || remainingPrompt === "") {
+        return;
+      }
+    }
   }
   await page.keyboard.press("Enter");
 }
 
-async function waitForGeneratedImages(page, beforeKeys, timeoutMs, maxImages, selectors) {
-  const deadline = Date.now() + timeoutMs;
+export async function waitForGeneratedImages(
+  page,
+  beforeKeys,
+  timeoutMs,
+  maxImages,
+  selectors,
+  dependencies = {},
+) {
+  const listCandidates = dependencies.listCandidates || listImageCandidates;
+  const now = dependencies.now || Date.now;
+  const pollMs = dependencies.pollMs ?? 1000;
+  const stableMs = dependencies.stableMs ?? 4000;
+  const deadline = now() + timeoutMs;
   let stableSignature = "";
   let stableSince = 0;
+  let lastScanError = null;
 
-  while (Date.now() < deadline) {
-    const candidates = diffCandidates(beforeKeys, await listImageCandidates(page)).slice(0, maxImages);
+  while (now() < deadline) {
+    let scanned;
+    try {
+      scanned = await listCandidates(page, selectors.image || IMAGE_SELECTOR);
+      lastScanError = null;
+    } catch (error) {
+      lastScanError = error;
+      await page.waitForTimeout(pollMs);
+      continue;
+    }
+    const candidates = diffCandidates(beforeKeys, scanned).slice(0, maxImages);
     const signature = candidates.map(candidateKey).join("|");
     if (signature && signature === stableSignature) {
-      stableSince ||= Date.now();
+      stableSince ||= now();
     } else {
       stableSignature = signature;
-      stableSince = signature ? Date.now() : 0;
+      stableSince = signature ? now() : 0;
     }
 
     const generating = await page
       .locator(selectors.generating)
       .count()
       .catch(() => 0);
-    if (candidates.length && !generating && Date.now() - stableSince >= 4000) {
+    if (candidates.length && !generating && now() - stableSince >= stableMs) {
       return candidates;
     }
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(pollMs);
+  }
+  if (lastScanError) {
+    throw new UserFacingError(
+      "Could not inspect the generated ChatGPT image result.",
+      "IMAGE_RESULT_SCAN_FAILED",
+      { cause: lastScanError },
+    );
   }
   throw new UserFacingError(
     "Timed out waiting for a newly generated image in ChatGPT.",
@@ -179,23 +251,64 @@ export class ChatGPTPage {
   }
 
   async assertReady(timeoutMs = 20000) {
-    await waitForAuthenticatedSession(this.page, timeoutMs);
     await findPromptBox(this.page, this.selectors, timeoutMs);
+    if (await hasVisibleGuestAuthControl(this.page)) {
+      throw new UserFacingError(
+        "The dedicated ChatGPT profile is not signed in. Run `chatgpt-web-image login` locally.",
+        "CHATGPT_LOGIN_REQUIRED",
+      );
+    }
     return { ready: true, url: this.page.url() };
   }
 
   async generate(prompt, sourceImages) {
+    await this.assertReady();
     const promptBox = await findPromptBox(this.page, this.selectors);
     await uploadSourceImages(this.page, sourceImages, this.selectors);
-    const beforeKeys = new Set((await listImageCandidates(this.page)).map(candidateKey));
-    await fillPrompt(this.page, promptBox, prompt);
-    await submitPrompt(this.page, this.selectors);
-    return waitForGeneratedImages(
-      this.page,
-      beforeKeys,
-      this.config.timeoutMs,
-      this.config.maxImages,
-      this.selectors,
-    );
+    let beforeKeys;
+    try {
+      beforeKeys = new Set(
+        (await listImageCandidates(this.page, this.selectors.image || IMAGE_SELECTOR)).map(candidateKey),
+      );
+    } catch (error) {
+      throw asAutomationPhaseError(
+        error,
+        "IMAGE_CANDIDATE_SCAN_FAILED",
+        "Could not inspect ChatGPT image candidates before generation.",
+      );
+    }
+    try {
+      await fillPrompt(this.page, promptBox, prompt);
+    } catch (error) {
+      throw asAutomationPhaseError(
+        error,
+        "PROMPT_FILL_FAILED",
+        "Could not fill the ChatGPT image prompt.",
+      );
+    }
+    try {
+      await submitPrompt(this.page, this.selectors, promptBox);
+    } catch (error) {
+      throw asAutomationPhaseError(
+        error,
+        "PROMPT_SUBMIT_FAILED",
+        "Could not submit the ChatGPT image prompt.",
+      );
+    }
+    try {
+      return await waitForGeneratedImages(
+        this.page,
+        beforeKeys,
+        this.config.timeoutMs,
+        this.config.maxImages,
+        this.selectors,
+      );
+    } catch (error) {
+      throw asAutomationPhaseError(
+        error,
+        "IMAGE_RESULT_SCAN_FAILED",
+        "Could not inspect the generated ChatGPT image result.",
+      );
+    }
   }
 }

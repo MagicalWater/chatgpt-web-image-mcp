@@ -12,6 +12,13 @@ import { toMcpContent } from "./mcp-result.js";
 
 export function createServer(config = loadConfig(), dependencies = {}) {
   const generator = dependencies.generator || new ImageGenerator(config);
+  const reportToolError =
+    dependencies.reportToolError ||
+    ((tool, safe) => {
+      process.stderr.write(
+        `[chatgpt-web-image] tool_error tool=${tool} code=${safe.code}\n`,
+      );
+    });
   const server = new McpServer({ name: "chatgpt-web-image", version: "0.3.0" });
 
   server.registerTool(
@@ -34,6 +41,7 @@ export function createServer(config = loadConfig(), dependencies = {}) {
         return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
       } catch (error) {
         const safe = safeError(error);
+        reportToolError("check_chatgpt_image_browser", safe);
         return { isError: true, content: [{ type: "text", text: JSON.stringify(safe) }] };
       }
     },
@@ -74,6 +82,7 @@ export function createServer(config = loadConfig(), dependencies = {}) {
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         const safe = safeError(error);
+        reportToolError("setup_chatgpt_image_project", safe);
         return { isError: true, content: [{ type: "text", text: JSON.stringify(safe) }] };
       }
     },
@@ -123,6 +132,7 @@ export function createServer(config = loadConfig(), dependencies = {}) {
         return { content: await toMcpContent(result, config.maxImageBytes) };
       } catch (error) {
         const safe = safeError(error);
+        reportToolError("generate_chatgpt_web_image", safe);
         return { isError: true, content: [{ type: "text", text: JSON.stringify(safe) }] };
       }
     },
@@ -131,15 +141,63 @@ export function createServer(config = loadConfig(), dependencies = {}) {
   return { server, generator };
 }
 
+export function createGracefulShutdown({ generator, server }) {
+  let shutdownPromise;
+  return function shutdown() {
+    if (!shutdownPromise) {
+      shutdownPromise = (async () => {
+        await generator.close();
+        await server.close().catch(() => {});
+      })();
+    }
+    return shutdownPromise;
+  };
+}
+
+export function installStdioShutdownHooks({ input = process.stdin, processLike = process, shutdown }) {
+  const runShutdown = () => {
+    void shutdown().catch(() => {
+      processLike.exitCode = 1;
+    });
+  };
+  input.once("end", runShutdown);
+  input.once("close", runShutdown);
+  processLike.once("SIGINT", runShutdown);
+  processLike.once("SIGTERM", runShutdown);
+
+  return () => {
+    input.off("end", runShutdown);
+    input.off("close", runShutdown);
+    processLike.off("SIGINT", runShutdown);
+    processLike.off("SIGTERM", runShutdown);
+  };
+}
+
+export async function connectWithGracefulShutdown({
+  server,
+  generator,
+  transport,
+  input = process.stdin,
+  processLike = process,
+}) {
+  const baseShutdown = createGracefulShutdown({ generator, server });
+  let removeHooks = () => {};
+  const shutdown = async () => {
+    try {
+      await baseShutdown();
+    } finally {
+      removeHooks();
+    }
+  };
+  removeHooks = installStdioShutdownHooks({ input, processLike, shutdown });
+  await server.connect(transport);
+  return { shutdown };
+}
+
 export async function main() {
   const { server, generator } = createServer();
-  const shutdown = async () => {
-    await generator.close();
-    process.exit(0);
-  };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
-  await server.connect(new StdioServerTransport());
+  const transport = new StdioServerTransport();
+  await connectWithGracefulShutdown({ server, generator, transport });
 }
 
 export function isMainModule(metaUrl = import.meta.url, argv1 = process.argv[1]) {
