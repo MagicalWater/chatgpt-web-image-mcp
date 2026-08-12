@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,129 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createServer } from "../src/mcp-server.js";
+import {
+  connectWithGracefulShutdown,
+  createGracefulShutdown,
+  createServer,
+  installStdioShutdownHooks,
+} from "../src/mcp-server.js";
+import { UserFacingError } from "../src/errors.js";
+
+test("stdio EOF starts one graceful browser shutdown before signal fallback", async () => {
+  const input = new EventEmitter();
+  const processLike = new EventEmitter();
+  let generatorCloseCalls = 0;
+  let serverCloseCalls = 0;
+  let releaseGeneratorClose;
+  const generatorCloseGate = new Promise((resolve) => {
+    releaseGeneratorClose = resolve;
+  });
+  const shutdown = createGracefulShutdown({
+    generator: {
+      async close() {
+        generatorCloseCalls += 1;
+        await generatorCloseGate;
+      },
+    },
+    server: {
+      async close() {
+        serverCloseCalls += 1;
+      },
+    },
+  });
+  const removeHooks = installStdioShutdownHooks({ input, processLike, shutdown });
+
+  input.emit("end");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(generatorCloseCalls, 1);
+
+  input.emit("close");
+  processLike.emit("SIGTERM");
+  releaseGeneratorClose();
+  await shutdown();
+
+  assert.equal(generatorCloseCalls, 1);
+  assert.equal(serverCloseCalls, 1);
+  removeHooks();
+});
+
+test("stdio shutdown hooks remain active after server connect resolves", async () => {
+  const input = new EventEmitter();
+  const processLike = new EventEmitter();
+  let generatorCloseCalls = 0;
+  let serverCloseCalls = 0;
+  const generator = {
+    async close() {
+      generatorCloseCalls += 1;
+    },
+  };
+  const server = {
+    async connect() {},
+    async close() {
+      serverCloseCalls += 1;
+    },
+  };
+
+  const { shutdown } = await connectWithGracefulShutdown({
+    server,
+    generator,
+    transport: {},
+    input,
+    processLike,
+  });
+  input.emit("end");
+  await shutdown();
+
+  assert.equal(generatorCloseCalls, 1);
+  assert.equal(serverCloseCalls, 1);
+});
+
+test("tool failures emit only sanitized tool and error code diagnostics", async (t) => {
+  const reports = [];
+  const fakeGenerator = {
+    async check() {
+      return { ready: true };
+    },
+    async generate() {
+      throw new UserFacingError("sensitive local detail", "PROMPT_SUBMIT_FAILED");
+    },
+    async setupProject() {
+      return { ok: true };
+    },
+    async close() {},
+  };
+  const { server } = createServer(
+    { maxImageBytes: 1024 },
+    {
+      generator: fakeGenerator,
+      reportToolError(tool, safe) {
+        reports.push({ tool, code: safe.code });
+      },
+    },
+  );
+  const client = new Client({ name: "diagnostic-test", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  t.after(async () => {
+    await client.close().catch(() => {});
+    await server.close().catch(() => {});
+  });
+
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  const result = await client.callTool({
+    name: "generate_chatgpt_web_image",
+    arguments: { prompt: "diagnostic", surface: "images" },
+  });
+
+  assert.equal(result.isError, true);
+  assert.deepEqual(reports, [
+    {
+      tool: "generate_chatgpt_web_image",
+      code: "PROMPT_SUBMIT_FAILED",
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(reports), /sensitive local detail/);
+});
 
 test("an MCP client can discover and call the image tools", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "chatgpt-web-image-mcp-test-"));
