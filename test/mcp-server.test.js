@@ -17,7 +17,9 @@ import {
 } from "../src/mcp-server.js";
 import { UserFacingError } from "../src/errors.js";
 
-test("recognizes the Windows executable entrypoint via file URL conversion", () => {
+test("recognizes the Windows executable entrypoint via file URL conversion", {
+  skip: process.platform !== "win32",
+}, () => {
   assert.equal(
     isMainModule(
       "file:///D:/Developer/chatgpt-web-image-mcp-admission/src/mcp-server.js",
