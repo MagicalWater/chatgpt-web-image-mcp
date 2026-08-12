@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -9,14 +10,18 @@ import {
 } from "../src/config.js";
 
 test("loads safe defaults under the operator home", () => {
-  const config = loadConfig({}, { homeDir: "/tmp/operator" });
+  const homeDir = path.resolve("/tmp/operator");
+  const config = loadConfig({}, { homeDir });
   assert.equal(config.chatgptUrl, "https://chatgpt.com/");
   assert.equal(config.surface, "chat");
   assert.equal(config.projectUrl, "");
   assert.equal(config.characterProfile, "");
   assert.equal(config.styleProfile, "");
-  assert.equal(config.settingsFile, "/tmp/operator/.chatgpt-web-image-mcp/settings.json");
-  assert.equal(config.chromeUserDataDir, "/tmp/operator/.chatgpt-web-image-mcp/chrome-profile");
+  assert.equal(config.settingsFile, path.join(homeDir, ".chatgpt-web-image-mcp", "settings.json"));
+  assert.equal(
+    config.chromeUserDataDir,
+    path.join(homeDir, ".chatgpt-web-image-mcp", "chrome-profile"),
+  );
   assert.deepEqual(config.allowedInputDirs, []);
 });
 

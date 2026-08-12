@@ -9,4 +9,5 @@ chatgpt-web-image-mcp-*.zip
 
 # A browser profile contains login cookies and must never be committed.
 chrome-profile/
+chrome-profile-cdp/
 .chatgpt-web-image-mcp/

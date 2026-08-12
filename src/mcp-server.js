@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { pathToFileURL } from "node:url";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -140,7 +142,14 @@ export async function main() {
   await server.connect(new StdioServerTransport());
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export function isMainModule(metaUrl = import.meta.url, argv1 = process.argv[1]) {
+  if (!argv1) {
+    return false;
+  }
+  return metaUrl === pathToFileURL(argv1).href;
+}
+
+if (isMainModule()) {
   main().catch((error) => {
     const safe = safeError(error);
     process.stderr.write(`${safe.code}: ${safe.message}\n`);

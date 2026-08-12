@@ -4,12 +4,31 @@ import { chromium } from "playwright-core";
 
 import { UserFacingError } from "./errors.js";
 
-function isChatGPTPage(page) {
+function isAllowedChatGPTUrl(value) {
   try {
-    const hostname = new URL(page.url()).hostname.toLowerCase();
-    return hostname === "chatgpt.com" || hostname.endsWith(".chatgpt.com");
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      (hostname === "chatgpt.com" || hostname.endsWith(".chatgpt.com"))
+    );
   } catch {
     return false;
+  }
+}
+
+function isChatGPTPage(page) {
+  return isAllowedChatGPTUrl(page.url());
+}
+
+function assertAllowedChatGPTUrl(value) {
+  if (!isAllowedChatGPTUrl(value)) {
+    throw new UserFacingError(
+      "ChatGPT navigation left the allowed HTTPS chatgpt.com origin.",
+      "CHATGPT_NAVIGATION_BLOCKED",
+    );
   }
 }
 
@@ -60,6 +79,7 @@ export class BrowserSession {
   }
 
   async getPage(targetUrl) {
+    assertAllowedChatGPTUrl(targetUrl);
     const context = await this.getContext();
     const pages = context.pages();
     const page = pages.find(isChatGPTPage) || pages[0] || (await context.newPage());
@@ -67,6 +87,9 @@ export class BrowserSession {
       try {
         await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
       } catch (error) {
+        if (error instanceof UserFacingError) {
+          throw error;
+        }
         throw new UserFacingError(
           "Could not open ChatGPT in Chrome. Check the browser network connection.",
           "CHATGPT_NAVIGATION_FAILED",
@@ -74,6 +97,7 @@ export class BrowserSession {
         );
       }
     }
+    assertAllowedChatGPTUrl(page.url());
     return page;
   }
 

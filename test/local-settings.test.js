@@ -25,7 +25,9 @@ test("writes and reads only supported non-secret local settings", async (t) => {
     character_profile: "same character",
     style_profile: "same style",
   });
-  assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600);
+  if (process.platform !== "win32") {
+    assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600);
+  }
 });
 
 test("returns empty settings when the file does not exist", () => {

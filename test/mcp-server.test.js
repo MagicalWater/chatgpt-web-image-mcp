@@ -7,7 +7,17 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createServer } from "../src/mcp-server.js";
+import { createServer, isMainModule } from "../src/mcp-server.js";
+
+test("recognizes the Windows executable entrypoint via file URL conversion", () => {
+  assert.equal(
+    isMainModule(
+      "file:///D:/Developer/chatgpt-web-image-mcp-admission/src/mcp-server.js",
+      "D:\\Developer\\chatgpt-web-image-mcp-admission\\src\\mcp-server.js",
+    ),
+    true,
+  );
+});
 
 test("an MCP client can discover and call the image tools", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "chatgpt-web-image-mcp-test-"));

@@ -1,6 +1,7 @@
 import { UserFacingError } from "./errors.js";
 
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
+export const LOGIN_SELECTOR = "[data-testid='login-button']";
 export const CHAT_SURFACE_SELECTORS = Object.freeze({
   prompt: [
     "#prompt-textarea",
@@ -76,6 +77,22 @@ async function findPromptBox(page, selectors, timeoutMs = 20000) {
   } catch (error) {
     throw new UserFacingError(
       "The ChatGPT prompt box is unavailable. Open the dedicated profile and sign in first.",
+      "CHATGPT_LOGIN_REQUIRED",
+      { cause: error },
+    );
+  }
+}
+
+async function waitForAuthenticatedSession(page, timeoutMs = 20000) {
+  const loginButton = page.locator(LOGIN_SELECTOR).first();
+  if ((await loginButton.count()) === 0 || !(await loginButton.isVisible().catch(() => false))) {
+    return;
+  }
+  try {
+    await loginButton.waitFor({ state: "hidden", timeout: timeoutMs });
+  } catch (error) {
+    throw new UserFacingError(
+      "The dedicated Chrome profile is not signed in to ChatGPT.",
       "CHATGPT_LOGIN_REQUIRED",
       { cause: error },
     );
@@ -162,6 +179,7 @@ export class ChatGPTPage {
   }
 
   async assertReady(timeoutMs = 20000) {
+    await waitForAuthenticatedSession(this.page, timeoutMs);
     await findPromptBox(this.page, this.selectors, timeoutMs);
     return { ready: true, url: this.page.url() };
   }
