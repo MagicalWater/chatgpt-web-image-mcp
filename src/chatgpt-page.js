@@ -48,6 +48,66 @@ export async function dismissRateLimitDialog(page) {
   return false;
 }
 
+export function classifyImageGenerationQuotaText(value) {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  const lower = text.toLowerCase();
+  const markers = [
+    "已用完圖片生成次數",
+    "you've used all your image generation requests",
+    "you have used all your image generation requests",
+    "you've reached your image generation limit",
+    "you have reached your image generation limit",
+  ];
+  const marker = markers.find((candidate) => lower.includes(candidate.toLowerCase()));
+  const markerIndex = marker ? lower.indexOf(marker.toLowerCase()) : -1;
+  if (markerIndex < 0) {
+    return { quotaExhausted: false };
+  }
+  const start = Math.max(0, markerIndex - 8);
+  const end = Math.min(text.length, markerIndex + marker.length + 64);
+  return {
+    quotaExhausted: true,
+    quotaMessage: text.slice(start, end),
+  };
+}
+
+export async function throwIfImageGenerationQuotaExhausted(page) {
+  const visibleStatusTexts = await page.evaluate(() => {
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    };
+    const normalize = (value) => String(value || "").trim().replace(/\s+/g, " ");
+    const texts = [];
+    const seen = new Set();
+    const selector = "main *, [role='main'] *, [role='alert'], [role='status'], [role='dialog'] *";
+    for (const element of document.querySelectorAll(selector)) {
+      if (!visible(element)) continue;
+      if (element.matches("input, textarea, [contenteditable='true']")) continue;
+      if (element.closest("[data-message-author-role='user']")) continue;
+      const text = normalize(element.textContent);
+      if (text.length < 8 || text.length > 320 || seen.has(text)) continue;
+      seen.add(text);
+      texts.push(text);
+      if (texts.length >= 200) break;
+    }
+    return texts;
+  });
+  const texts = Array.isArray(visibleStatusTexts) ? visibleStatusTexts : [visibleStatusTexts];
+  const result = texts.map(classifyImageGenerationQuotaText).find((candidate) => candidate.quotaExhausted);
+
+  if (result?.quotaExhausted) {
+    const detail = String(result.quotaMessage || "").trim();
+    throw new UserFacingError(
+      detail
+        ? `ChatGPT image generation quota is exhausted. ${detail}`
+        : "ChatGPT image generation quota is exhausted. Try again after the account cooldown.",
+      "IMAGE_GENERATION_QUOTA_EXHAUSTED",
+    );
+  }
+}
+
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
 export const CHAT_SURFACE_SELECTORS = Object.freeze({
   prompt: [
@@ -254,6 +314,7 @@ export async function waitForGeneratedImages(
   let lastScanError = null;
 
   while (now() < deadline) {
+    await throwIfImageGenerationQuotaExhausted(page);
     await dismissRateLimitDialog(page);
     let scanned;
     try {

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import * as chatgptPageModule from "../src/chatgpt-page.js";
+
 import {
   asAutomationPhaseError,
   candidateKey,
@@ -97,8 +99,11 @@ test("result polling dismisses the rate-limit dialog and keeps waiting", async (
   let virtualNow = 0;
   let scanCalls = 0;
   let dialogCalls = 0;
+  let evaluateCalls = 0;
   const page = {
     async evaluate() {
+      evaluateCalls += 1;
+      if (evaluateCalls % 2 === 1) return "";
       dialogCalls += 1;
       if (dialogCalls > 1) return { matched: false };
       return {
@@ -139,6 +144,72 @@ test("result polling dismisses the rate-limit dialog and keeps waiting", async (
     },
   );
   assert.ok(scanCalls > 0);
+  assert.ok(dialogCalls > 0);
+});
+
+test("result polling fails fast on image-generation quota exhaustion", async () => {
+  let virtualNow = 0;
+  let scanCalls = 0;
+  const page = {
+    async evaluate() {
+      return ["你目前已用完圖片生成次數，請於約 4 小時內再試"];
+    },
+    locator() {
+      return { async count() { return 0; } };
+    },
+    async waitForTimeout(ms) {
+      virtualNow += ms;
+    },
+  };
+
+  await assert.rejects(
+    waitForGeneratedImages(
+      page,
+      new Set(),
+      20,
+      4,
+      { image: "image", generating: "generating" },
+      {
+        async listCandidates() {
+          scanCalls += 1;
+          return [];
+        },
+        now: () => virtualNow,
+        pollMs: 1,
+        stableMs: 0,
+      },
+    ),
+    (error) => {
+      assert.equal(error.code, "IMAGE_GENERATION_QUOTA_EXHAUSTED");
+      assert.match(error.message, /4 小時/);
+      return true;
+    },
+  );
+  assert.equal(scanCalls, 0);
+});
+
+test("quota text classifier recognizes the zh-TW exhaustion message", () => {
+  assert.equal(typeof chatgptPageModule.classifyImageGenerationQuotaText, "function");
+  const result = chatgptPageModule.classifyImageGenerationQuotaText(
+    "你目前已用完圖片生成次數，請於約 4 小時內再試",
+  );
+  assert.equal(result?.quotaExhausted, true);
+  assert.match(result?.quotaMessage || "", /4 小時/);
+});
+
+test("quota text classifier recognizes an English exhaustion message", () => {
+  const result = chatgptPageModule.classifyImageGenerationQuotaText(
+    "You've used all your image generation requests. Try again in about 3 hours.",
+  );
+  assert.equal(result?.quotaExhausted, true);
+  assert.match(result?.quotaMessage || "", /3 hours/i);
+});
+
+test("quota text classifier does not confuse request-frequency dialogs with quota exhaustion", () => {
+  const result = chatgptPageModule.classifyImageGenerationQuotaText(
+    "太多要求 你的要求過於頻繁。請稍等幾分鐘後再試一次。",
+  );
+  assert.equal(result?.quotaExhausted, false);
 });
 
 test("Images surface restricts generated-image capture to imagegen result containers", () => {

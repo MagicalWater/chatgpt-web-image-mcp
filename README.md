@@ -259,6 +259,8 @@ codex mcp add chatgpt-web-image -- \
 - `source_images`：可选，最多 8 个本地图片路径，必须位于输入白名单。
 - `chatgpt_url`：可选，只允许无凭据的 HTTPS `chatgpt.com` 页面；显式 URL 优先于 surface 默认地址。
 
+如果 ChatGPT 明确显示图片生成额度已用完（例如“你目前已用完圖片生成次數，請於約 4 小時內再試”或对应英文提示），本次生成会立即作为 terminal failure 返回 `IMAGE_GENERATION_QUOTA_EXHAUSTED`，而不会继续等待到 `IMAGE_GENERATION_TIMEOUT`。若页面同时提供冷却/重试时间，错误消息会保留该非敏感提示供诊断。这个状态与上面的“太多要求 / Too many requests”请求频率对话框不同；后者仍按既有 contract 安全关闭后继续流程。
+
 工具按顺序返回：
 
 1. JSON 摘要，包括 `job_id`、`surface`、实际 URL、一致性档案启用状态、文件路径、尺寸、MIME 和捕获方式。

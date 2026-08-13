@@ -49,6 +49,16 @@ Cross-platform status:
 - macOS popup reproduction note: the live tool result does not expose telemetry proving whether the request-frequency dialog appeared during that successful generation, so macOS does not independently claim a live popup-observed/dismiss-observed event. The corrective behavior itself is covered by the passing regression tests, while Windows remains the live popup-dismiss acceptance authority.
 - Promotion: completed on macOS acceptance. `corrective/cross-platform-admission` was fast-forwarded from `287a8ad9bd7c3721d2cc957782abe76fbb7a4aa3` to the accepted corrective lineage at `8f83744a7292028432f3caa6c47959342bca511f`; no merge commit or behavior redesign was required.
 
+### Image-generation quota exhaustion classification
+
+- Scope: classify an explicit ChatGPT image-generation quota exhaustion message as a terminal generation failure during result polling.
+- Machine-readable error: `IMAGE_GENERATION_QUOTA_EXHAUSTED`.
+- Supported wording: current zh-TW `已用完圖片生成次數` wording plus narrow English image-generation exhaustion equivalents.
+- Diagnostic behavior: preserve only the nearby visible quota/cooldown text in the sanitized user-facing message when available.
+- Semantic boundary: this does not change request-frequency dialog handling. `太多要求 / Too many requests` remains dismiss-and-continue unless its acknowledgement control cannot be dismissed safely.
+- Non-goals: no login/profile, source allowlist, result selector, Executor, DevSpace, or browser-ownership changes.
+- Verification: RED/GREEN regression coverage includes fail-fast quota classification, zh-TW and English wording, and explicit non-confusion with the request-frequency dialog contract.
+
 ## Patch-governance rule
 
 Do not introduce the owning projects' full Task/governance framework into this fork. Keep changes minimal and upstream-friendly. The patch ledger is the authority for what this fork intentionally carries; upstream source remains the baseline authority for everything else.
