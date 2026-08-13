@@ -47,7 +47,7 @@ Cross-platform status:
 - Windows: PASS.
 - macOS: PASS on `corrective/rate-limit-dialog-handling` after syncing the checkout to `985b98b`. `npm run check` PASS; full `npm test` PASS with 65 passed, 0 failed, 1 Windows-only skipped out of 66 tests; `npm pack --dry-run` PASS. Live readiness returned `ready: true` for the dedicated profile on the Images surface. Native generation/image-return acceptance also PASS: the production Executor route returned four native image contents captured through `authenticated_image_fetch`. The first native generation attempt hit a transient connector-layer HTTP 502 while readiness remained true; one retry of the same production path succeeded.
 - macOS popup reproduction note: the live tool result does not expose telemetry proving whether the request-frequency dialog appeared during that successful generation, so macOS does not independently claim a live popup-observed/dismiss-observed event. The corrective behavior itself is covered by the passing regression tests, while Windows remains the live popup-dismiss acceptance authority.
-- Promotion recommendation: the corrective is now cross-platform verified and is a fast-forward descendant of `corrective/cross-platform-admission`; promote it into the fork's shared cross-platform authority with a fast-forward rather than redesigning or reimplementing the dialog behavior.
+- Promotion: completed on macOS acceptance. `corrective/cross-platform-admission` was fast-forwarded from `287a8ad9bd7c3721d2cc957782abe76fbb7a4aa3` to the accepted corrective lineage at `8f83744a7292028432f3caa6c47959342bca511f`; no merge commit or behavior redesign was required.
 
 ## Patch-governance rule
 
