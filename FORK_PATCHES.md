@@ -51,6 +51,7 @@ Cross-platform status:
 
 ### Image-generation quota exhaustion classification
 
+- Functional corrective commit: `33f6f0b`.
 - Scope: classify an explicit ChatGPT image-generation quota exhaustion message as a terminal generation failure during result polling.
 - Machine-readable error: `IMAGE_GENERATION_QUOTA_EXHAUSTED`.
 - Supported wording: current zh-TW `已用完圖片生成次數` wording plus narrow English image-generation exhaustion equivalents.
@@ -58,6 +59,8 @@ Cross-platform status:
 - Semantic boundary: this does not change request-frequency dialog handling. `太多要求 / Too many requests` remains dismiss-and-continue unless its acknowledgement control cannot be dismissed safely.
 - Non-goals: no login/profile, source allowlist, result selector, Executor, DevSpace, or browser-ownership changes.
 - Verification: RED/GREEN regression coverage includes fail-fast quota classification, zh-TW and English wording, and explicit non-confusion with the request-frequency dialog contract.
+- macOS verification: focused `chatgpt-page` tests 17/17 PASS; full suite 69 PASS, 0 fail, 1 Windows-only skip; `npm run check` PASS; `npm pack --dry-run` PASS.
+- Windows verification after fast-forward to the functional commit: full suite 70/70 PASS; `npm run check` PASS; `npm pack --dry-run` PASS.
 
 ## Patch-governance rule
 
