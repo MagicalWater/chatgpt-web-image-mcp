@@ -212,6 +212,15 @@ test("quota text classifier does not confuse request-frequency dialogs with quot
   assert.equal(result?.quotaExhausted, false);
 });
 
+test("quota text classifier keeps only the quota cooldown diagnostic", () => {
+  const result = chatgptPageModule.classifyImageGenerationQuotaText(
+    "PT 說：你目前已用完圖片生成次數，請於於 3 小時 內再試ChatGPT 可能會出錯。請查核重要資訊。",
+  );
+  assert.equal(result?.quotaExhausted, true);
+  assert.match(result?.quotaMessage || "", /3 小時/);
+  assert.doesNotMatch(result?.quotaMessage || "", /PT 說|ChatGPT 可能會出錯/);
+});
+
 test("Images surface restricts generated-image capture to imagegen result containers", () => {
   assert.equal(
     IMAGES_SURFACE_SELECTORS.image,

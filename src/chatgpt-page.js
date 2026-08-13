@@ -63,11 +63,23 @@ export function classifyImageGenerationQuotaText(value) {
   if (markerIndex < 0) {
     return { quotaExhausted: false };
   }
-  const start = Math.max(0, markerIndex - 8);
-  const end = Math.min(text.length, markerIndex + marker.length + 64);
+  const isChinese = marker.includes("圖片生成次數");
+  let end = markerIndex + marker.length;
+  if (isChinese) {
+    const retryIndex = Math.max(text.indexOf("再試", end), text.indexOf("再试", end));
+    if (retryIndex >= 0 && retryIndex - markerIndex <= 120) {
+      end = retryIndex + 2;
+    }
+  } else {
+    const retryIndex = lower.indexOf("try again", end);
+    if (retryIndex >= 0 && retryIndex - markerIndex <= 160) {
+      const punctuation = lower.slice(retryIndex, retryIndex + 160).search(/[.!?]/);
+      end = punctuation >= 0 ? retryIndex + punctuation + 1 : Math.min(text.length, retryIndex + 120);
+    }
+  }
   return {
     quotaExhausted: true,
-    quotaMessage: text.slice(start, end),
+    quotaMessage: text.slice(markerIndex, end),
   };
 }
 
