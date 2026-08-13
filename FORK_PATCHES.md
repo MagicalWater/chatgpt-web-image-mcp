@@ -26,7 +26,8 @@ This repository is a fork of `leixyou/chatgpt-web-image-mcp`. Keep fork-specific
 ### Request-frequency dialog handling
 
 - Branch: `corrective/rate-limit-dialog-handling`
-- Current corrective HEAD: `008878cc3e8c3e2b53d35e2dec13041f0c632dd4`
+- Functional corrective commit: `008878cc3e8c3e2b53d35e2dec13041f0c632dd4`
+- Patch-ledger commit after the functional corrective: `985b98b440ac25eef39d2b25bd52ec1044b26958`
 - Supersedes behavior introduced by intermediate commit `7065b41`; do not treat `7065b41` alone as the accepted contract.
 - Changed files: `src/chatgpt-page.js`, `test/chatgpt-page.test.js`, `README.md`.
 - Live contract observed on ChatGPT web: visible `role="dialog"`, heading `太多要求` / `Too many requests`, single acknowledgement button (`知道了` / equivalent).
@@ -44,8 +45,9 @@ Verification on Windows:
 Cross-platform status:
 
 - Windows: PASS.
-- macOS sync/acceptance: **OPEN**. The macOS checkout has not yet been updated to `008878c` because both `bridge-mac` and `bridge-mac-backup` failed at `open_workspace` with tool-layer `Resource not found` errors in the current ChatGPT conversation.
-- Next action: on a fresh conversation with a healthy mac bridge, sync `/Users/water/Developer/projects/chatgpt-web-image-mcp-admission` to `corrective/rate-limit-dialog-handling` at `008878c`, then run `npm run check`, `npm test`, `npm pack --dry-run`, followed by macOS live readiness/generation acceptance.
+- macOS: PASS on `corrective/rate-limit-dialog-handling` after syncing the checkout to `985b98b`. `npm run check` PASS; full `npm test` PASS with 65 passed, 0 failed, 1 Windows-only skipped out of 66 tests; `npm pack --dry-run` PASS. Live readiness returned `ready: true` for the dedicated profile on the Images surface. Native generation/image-return acceptance also PASS: the production Executor route returned four native image contents captured through `authenticated_image_fetch`. The first native generation attempt hit a transient connector-layer HTTP 502 while readiness remained true; one retry of the same production path succeeded.
+- macOS popup reproduction note: the live tool result does not expose telemetry proving whether the request-frequency dialog appeared during that successful generation, so macOS does not independently claim a live popup-observed/dismiss-observed event. The corrective behavior itself is covered by the passing regression tests, while Windows remains the live popup-dismiss acceptance authority.
+- Promotion recommendation: the corrective is now cross-platform verified and is a fast-forward descendant of `corrective/cross-platform-admission`; promote it into the fork's shared cross-platform authority with a fast-forward rather than redesigning or reimplementing the dialog behavior.
 
 ## Patch-governance rule
 
