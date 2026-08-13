@@ -7,6 +7,7 @@ import {
   ChatGPTPage,
   compactImageSource,
   diffCandidates,
+  isGeneratedImageCandidate,
   submitPrompt,
   waitForGeneratedImages,
 } from "../src/chatgpt-page.js";
@@ -42,6 +43,18 @@ test("diffCandidates returns only unique newly visible images", () => {
   const fresh = { source: "https://chatgpt.com/new.png", width: 1024, height: 1024 };
   const result = diffCandidates(new Set([candidateKey(old)]), [old, fresh, fresh]);
   assert.deepEqual(result, [fresh]);
+});
+
+test("chat candidate provenance rejects user-authored source images", () => {
+  const base = {
+    source: "https://chatgpt.com/source.png",
+    width: 1280,
+    height: 720,
+    visible: true,
+  };
+  assert.equal(isGeneratedImageCandidate({ ...base, messageRole: "user" }), false);
+  assert.equal(isGeneratedImageCandidate({ ...base, messageRole: "assistant" }), true);
+  assert.equal(isGeneratedImageCandidate({ ...base, messageRole: "" }), true);
 });
 
 test("compactImageSource bounds data URL keys", () => {

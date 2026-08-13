@@ -17,7 +17,7 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "check": "node --check bin/chatgpt-web-image.js && node --check src/browser-session.js && node --check src/chatgpt-page.js && node --check src/cli-args.js && node --check src/config.js && node --check src/consistency-profiles.js && node --check src/errors.js && node --check src/generator.js && node --check src/image-capture.js && node --check src/images-page.js && node --check src/local-settings.js && node --check src/mcp-result.js && node --check src/mcp-server.js && node --check src/project-manager.js && node --check src/project-page.js && node --check src/surface-adapters.js && node --check src/surface-config.js && node --check src/validation.js",
+    "check": "node --check bin/chatgpt-web-image.js && node --check src/browser-profile-lease.js && node --check src/browser-session.js && node --check src/chatgpt-page.js && node --check src/cli-args.js && node --check src/config.js && node --check src/consistency-profiles.js && node --check src/errors.js && node --check src/generator.js && node --check src/image-capture.js && node --check src/images-page.js && node --check src/local-settings.js && node --check src/mcp-result.js && node --check src/mcp-server.js && node --check src/project-manager.js && node --check src/project-page.js && node --check src/surface-adapters.js && node --check src/surface-config.js && node --check src/validation.js",
     "login": "node bin/chatgpt-web-image.js login",
     "test": "node --test",
     "prepack": "npm run check && npm test"

@@ -58,21 +58,31 @@ export function diffCandidates(beforeKeys, candidates) {
   });
 }
 
+export function isGeneratedImageCandidate(row) {
+  return (
+    row.source &&
+    row.visible &&
+    row.width >= 256 &&
+    row.height >= 256 &&
+    row.messageRole !== "user"
+  );
+}
+
 async function listImageCandidates(page, selector = IMAGE_SELECTOR) {
   const rows = await page.locator(selector).evaluateAll((images) =>
     images.map((image) => {
       const rect = image.getBoundingClientRect();
+      const message = image.closest("[data-message-author-role]");
       return {
         source: image.currentSrc || image.src || "",
         width: Math.max(image.naturalWidth || 0, Math.round(rect.width)),
         height: Math.max(image.naturalHeight || 0, Math.round(rect.height)),
         visible: rect.width > 0 && rect.height > 0,
+        messageRole: message?.getAttribute("data-message-author-role") || "",
       };
     }),
   );
-  return rows.filter(
-    (row) => row.source && row.visible && row.width >= 256 && row.height >= 256,
-  );
+  return rows.filter(isGeneratedImageCandidate);
 }
 
 async function findPromptBox(page, selectors, timeoutMs = 20000) {

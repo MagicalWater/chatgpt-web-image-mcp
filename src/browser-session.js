@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 
 import { chromium } from "playwright-core";
 
+import { acquireBrowserProfileLease } from "./browser-profile-lease.js";
 import { UserFacingError } from "./errors.js";
 
 function isAllowedChatGPTUrl(value) {
@@ -33,11 +34,16 @@ function assertAllowedChatGPTUrl(value) {
 }
 
 export class BrowserSession {
-  constructor(config) {
+  constructor(config, dependencies = {}) {
     this.config = config;
     this.browser = null;
     this.context = null;
     this.ownsContext = false;
+    this.profileLease = null;
+    this.acquireProfileLease = dependencies.acquireProfileLease ?? acquireBrowserProfileLease;
+    this.connectOverCDP = dependencies.connectOverCDP ?? ((url) => chromium.connectOverCDP(url));
+    this.launchPersistentContext = dependencies.launchPersistentContext
+      ?? ((userDataDir, options) => chromium.launchPersistentContext(userDataDir, options));
   }
 
   async getContext() {
@@ -46,7 +52,7 @@ export class BrowserSession {
     }
     try {
       if (this.config.cdpUrl) {
-        this.browser = await chromium.connectOverCDP(this.config.cdpUrl);
+        this.browser = await this.connectOverCDP(this.config.cdpUrl);
         this.context = this.browser.contexts()[0];
         if (!this.context) {
           throw new UserFacingError(
@@ -58,12 +64,21 @@ export class BrowserSession {
       }
 
       await fs.mkdir(this.config.chromeUserDataDir, { recursive: true, mode: 0o700 });
-      this.context = await chromium.launchPersistentContext(this.config.chromeUserDataDir, {
-        acceptDownloads: true,
-        channel: this.config.chromeChannel,
-        headless: this.config.headless,
-        viewport: { width: 1440, height: 1100 },
+      this.profileLease = await this.acquireProfileLease(this.config.chromeUserDataDir, {
+        timeoutMs: this.config.timeoutMs,
       });
+      try {
+        this.context = await this.launchPersistentContext(this.config.chromeUserDataDir, {
+          acceptDownloads: true,
+          channel: this.config.chromeChannel,
+          headless: this.config.headless,
+          viewport: { width: 1440, height: 1100 },
+        });
+      } catch (error) {
+        await this.profileLease.release().catch(() => {});
+        this.profileLease = null;
+        throw error;
+      }
       this.ownsContext = true;
       return this.context;
     } catch (error) {
@@ -105,10 +120,14 @@ export class BrowserSession {
     if (this.ownsContext && this.context) {
       await this.context.close().catch(() => {});
     }
+    if (this.profileLease) {
+      await this.profileLease.release().catch(() => {});
+    }
     // A CDP connection belongs to the operator. Let process exit disconnect it
     // without closing the user's Chrome browser.
     this.context = null;
     this.browser = null;
     this.ownsContext = false;
+    this.profileLease = null;
   }
 }

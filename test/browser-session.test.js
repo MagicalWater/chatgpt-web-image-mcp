@@ -42,3 +42,58 @@ test("rejects a redirect that leaves the ChatGPT allowlist", async () => {
     (error) => error?.code === "CHATGPT_NAVIGATION_BLOCKED",
   );
 });
+
+test("persistent browser launch releases profile lease after launch failure", async () => {
+  let released = 0;
+  const session = new BrowserSession(
+    {
+      chromeUserDataDir: "C:/profile",
+      chromeChannel: "chrome",
+      headless: false,
+    },
+    {
+      acquireProfileLease: async () => ({ release: async () => { released += 1; } }),
+      launchPersistentContext: async () => { throw new Error("launch failed"); },
+    },
+  );
+  await assert.rejects(session.getContext(), (error) => error?.code === "BROWSER_START_FAILED");
+  assert.equal(released, 1);
+});
+
+test("persistent browser context holds lease until normal close", async () => {
+  let released = 0;
+  let closed = 0;
+  const session = new BrowserSession(
+    {
+      chromeUserDataDir: "C:/profile",
+      chromeChannel: "chrome",
+      headless: false,
+    },
+    {
+      acquireProfileLease: async () => ({ release: async () => { released += 1; } }),
+      launchPersistentContext: async () => ({
+        async close() { closed += 1; },
+      }),
+    },
+  );
+  await session.getContext();
+  assert.equal(released, 0);
+  await session.close();
+  assert.equal(closed, 1);
+  assert.equal(released, 1);
+});
+
+test("CDP mode does not acquire a persistent-profile lease", async () => {
+  let acquired = 0;
+  const context = {};
+  const session = new BrowserSession(
+    { cdpUrl: "http://127.0.0.1:9222" },
+    {
+      acquireProfileLease: async () => { acquired += 1; },
+      connectOverCDP: async () => ({ contexts: () => [context] }),
+    },
+  );
+  assert.equal(await session.getContext(), context);
+  assert.equal(acquired, 0);
+  await session.close();
+});
