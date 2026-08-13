@@ -74,34 +74,36 @@ test("assertReady rejects a guest page even when the prompt box is visible", asy
   });
 });
 
-test("rate-limit dialog is dismissed and classified from live ChatGPT dialog contract", async () => {
+test("rate-limit dialog is dismissed without failing the flow", async () => {
   let dismissed = 0;
   const page = {
     async evaluate() {
       dismissed += 1;
       return {
         matched: true,
+        dismissed: true,
         title: "太多要求",
         message: "你的要求過於頻繁。為了保護你的資料，我們已暫時限制了你的對話存取權限。",
       };
     },
   };
 
-  await assert.rejects(dismissRateLimitDialog(page), (error) => {
-    assert.equal(error.code, "CHATGPT_RATE_LIMITED");
-    assert.match(error.message, /temporarily limited/i);
-    return true;
-  });
+  const result = await dismissRateLimitDialog(page);
+  assert.equal(result, true);
   assert.equal(dismissed, 1);
 });
 
-test("result polling stops immediately when ChatGPT shows the rate-limit dialog", async () => {
+test("result polling dismisses the rate-limit dialog and keeps waiting", async () => {
   let virtualNow = 0;
   let scanCalls = 0;
+  let dialogCalls = 0;
   const page = {
     async evaluate() {
+      dialogCalls += 1;
+      if (dialogCalls > 1) return { matched: false };
       return {
         matched: true,
+        dismissed: true,
         title: "太多要求",
         message: "請稍等幾分鐘後再試一次。",
       };
@@ -118,7 +120,7 @@ test("result polling stops immediately when ChatGPT shows the rate-limit dialog"
     waitForGeneratedImages(
       page,
       new Set(),
-      100,
+      2,
       4,
       { image: "image", generating: "generating" },
       {
@@ -132,11 +134,11 @@ test("result polling stops immediately when ChatGPT shows the rate-limit dialog"
       },
     ),
     (error) => {
-      assert.equal(error.code, "CHATGPT_RATE_LIMITED");
+      assert.equal(error.code, "IMAGE_GENERATION_TIMEOUT");
       return true;
     },
   );
-  assert.equal(scanCalls, 0);
+  assert.ok(scanCalls > 0);
 });
 
 test("Images surface restricts generated-image capture to imagegen result containers", () => {

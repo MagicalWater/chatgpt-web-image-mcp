@@ -26,20 +26,26 @@ export async function dismissRateLimitDialog(page) {
       if (!titleMatches(title)) continue;
       const message = normalize(dialog.textContent);
       const buttons = Array.from(dialog.querySelectorAll("button")).filter(visible);
-      if (buttons.length === 1) {
-        buttons[0].click();
-      }
-      return { matched: true, title, message };
+      const dismissed = buttons.length === 1;
+      if (dismissed) buttons[0].click();
+      return { matched: true, dismissed, title, message };
     }
     return { matched: false };
   });
 
   if (result?.matched) {
-    throw new UserFacingError(
-      "ChatGPT temporarily limited this web session because requests were too frequent. Wait a few minutes and try again.",
-      "CHATGPT_RATE_LIMITED",
-    );
+    if (!result.dismissed) {
+      throw new UserFacingError(
+        "ChatGPT showed a request-frequency dialog, but its acknowledgement control could not be dismissed safely.",
+        "CHATGPT_RATE_LIMIT_DISMISS_FAILED",
+      );
+    }
+    if (typeof page.waitForTimeout === "function") {
+      await page.waitForTimeout(150).catch(() => {});
+    }
+    return true;
   }
+  return false;
 }
 
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
