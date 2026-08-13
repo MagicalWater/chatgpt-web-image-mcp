@@ -7,6 +7,41 @@ export function asAutomationPhaseError(error, code, message) {
   return new UserFacingError(message, code, { cause: error });
 }
 
+export async function dismissRateLimitDialog(page) {
+  const result = await page.evaluate(() => {
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    };
+    const normalize = (value) => String(value || "").trim().replace(/\s+/g, " ");
+    const titleMatches = (value) => {
+      const text = normalize(value).toLowerCase();
+      return text === "太多要求" || text === "too many requests";
+    };
+
+    for (const dialog of document.querySelectorAll("[role='dialog']")) {
+      if (!visible(dialog)) continue;
+      const title = normalize(dialog.querySelector("h1, h2, h3, [role='heading']")?.textContent);
+      if (!titleMatches(title)) continue;
+      const message = normalize(dialog.textContent);
+      const buttons = Array.from(dialog.querySelectorAll("button")).filter(visible);
+      if (buttons.length === 1) {
+        buttons[0].click();
+      }
+      return { matched: true, title, message };
+    }
+    return { matched: false };
+  });
+
+  if (result?.matched) {
+    throw new UserFacingError(
+      "ChatGPT temporarily limited this web session because requests were too frequent. Wait a few minutes and try again.",
+      "CHATGPT_RATE_LIMITED",
+    );
+  }
+}
+
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
 export const CHAT_SURFACE_SELECTORS = Object.freeze({
   prompt: [
@@ -213,6 +248,7 @@ export async function waitForGeneratedImages(
   let lastScanError = null;
 
   while (now() < deadline) {
+    await dismissRateLimitDialog(page);
     let scanned;
     try {
       scanned = await listCandidates(page, selectors.image || IMAGE_SELECTOR);
@@ -261,6 +297,7 @@ export class ChatGPTPage {
   }
 
   async assertReady(timeoutMs = 20000) {
+    await dismissRateLimitDialog(this.page);
     await findPromptBox(this.page, this.selectors, timeoutMs);
     if (await hasVisibleGuestAuthControl(this.page)) {
       throw new UserFacingError(
@@ -268,6 +305,7 @@ export class ChatGPTPage {
         "CHATGPT_LOGIN_REQUIRED",
       );
     }
+    await dismissRateLimitDialog(this.page);
     return { ready: true, url: this.page.url() };
   }
 

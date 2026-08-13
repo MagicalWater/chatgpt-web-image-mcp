@@ -233,6 +233,8 @@ codex mcp add chatgpt-web-image -- \
 
 检查专用 Chrome profile 是否能打开 ChatGPT 且已出现对应输入框。可选传入 `surface` 和 `chatgpt_url`，用于分别检查普通聊天、项目或 `/images`。
 
+如果 ChatGPT 显示“太多要求 / Too many requests”并暂时限制对话访问，工具会关闭该阻塞对话框并立即返回 `CHATGPT_RATE_LIMITED`。这类状态不会被误报为已就绪，也不会继续等待到普通浏览器或图片生成超时。
+
 ### `generate_chatgpt_web_image`
 
 参数：
@@ -263,6 +265,8 @@ codex mcp add chatgpt-web-image -- \
 2. 一个或多个 MCP `image` 内容块，AI 客户端可直接查看和继续使用。
 
 同一个 MCP 进程中的调用会严格串行，避免多个请求同时操作一个输入框。
+
+如果生成过程中 ChatGPT 才显示“太多要求 / Too many requests”，当前生成调用同样会立即返回 `CHATGPT_RATE_LIMITED`，且不会把这次受限状态误分类为 `CHATGPT_LOGIN_REQUIRED` 或 `IMAGE_GENERATION_TIMEOUT`。
 
 ## 使用 CDP 连接现有专用 Chrome
 

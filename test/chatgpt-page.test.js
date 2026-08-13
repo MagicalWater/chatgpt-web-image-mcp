@@ -6,6 +6,7 @@ import {
   candidateKey,
   ChatGPTPage,
   compactImageSource,
+  dismissRateLimitDialog,
   diffCandidates,
   isGeneratedImageCandidate,
   submitPrompt,
@@ -71,6 +72,71 @@ test("assertReady rejects a guest page even when the prompt box is visible", asy
     assert.equal(error.code, "CHATGPT_LOGIN_REQUIRED");
     return true;
   });
+});
+
+test("rate-limit dialog is dismissed and classified from live ChatGPT dialog contract", async () => {
+  let dismissed = 0;
+  const page = {
+    async evaluate() {
+      dismissed += 1;
+      return {
+        matched: true,
+        title: "太多要求",
+        message: "你的要求過於頻繁。為了保護你的資料，我們已暫時限制了你的對話存取權限。",
+      };
+    },
+  };
+
+  await assert.rejects(dismissRateLimitDialog(page), (error) => {
+    assert.equal(error.code, "CHATGPT_RATE_LIMITED");
+    assert.match(error.message, /temporarily limited/i);
+    return true;
+  });
+  assert.equal(dismissed, 1);
+});
+
+test("result polling stops immediately when ChatGPT shows the rate-limit dialog", async () => {
+  let virtualNow = 0;
+  let scanCalls = 0;
+  const page = {
+    async evaluate() {
+      return {
+        matched: true,
+        title: "太多要求",
+        message: "請稍等幾分鐘後再試一次。",
+      };
+    },
+    locator() {
+      return { async count() { return 0; } };
+    },
+    async waitForTimeout(ms) {
+      virtualNow += ms;
+    },
+  };
+
+  await assert.rejects(
+    waitForGeneratedImages(
+      page,
+      new Set(),
+      100,
+      4,
+      { image: "image", generating: "generating" },
+      {
+        async listCandidates() {
+          scanCalls += 1;
+          return [];
+        },
+        now: () => virtualNow,
+        pollMs: 1,
+        stableMs: 0,
+      },
+    ),
+    (error) => {
+      assert.equal(error.code, "CHATGPT_RATE_LIMITED");
+      return true;
+    },
+  );
+  assert.equal(scanCalls, 0);
 });
 
 test("Images surface restricts generated-image capture to imagegen result containers", () => {
@@ -188,6 +254,9 @@ test("result polling recovers from a transient image scan failure without resubm
     height: 1024,
   };
   const page = {
+    async evaluate() {
+      return { matched: false };
+    },
     locator(selector) {
       assert.equal(selector, "generating");
       return { async count() { return 0; } };
@@ -222,6 +291,9 @@ test("result polling recovers from a transient image scan failure without resubm
 test("result polling preserves scan failure when every read fails until the deadline", async () => {
   let virtualNow = 0;
   const page = {
+    async evaluate() {
+      return { matched: false };
+    },
     locator() {
       return { async count() { return 0; } };
     },
