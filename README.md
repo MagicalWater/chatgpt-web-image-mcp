@@ -261,6 +261,10 @@ codex mcp add chatgpt-web-image -- \
 
 如果 ChatGPT 明确显示图片生成额度已用完（例如“你目前已用完圖片生成次數，請於約 4 小時內再試”或对应英文提示），本次生成会立即作为 terminal failure 返回 `IMAGE_GENERATION_QUOTA_EXHAUSTED`，而不会继续等待到 `IMAGE_GENERATION_TIMEOUT`。若页面同时提供冷却/重试时间，错误消息会保留该非敏感提示供诊断。这个状态与上面的“太多要求 / Too many requests”请求频率对话框不同；后者仍按既有 contract 安全关闭后继续流程。
 
+Windows 可选配置位于仓库根目录的本地 `config.json`。复制 `config.example.json` 为 `config.json`，并设置 `accountSwitchCommand` 为账号切换 `.cmd` 路径。仅当这个字段非空、且首次生成明确返回 `IMAGE_GENERATION_QUOTA_EXHAUSTED` 时，MCP 才会释放 dedicated Chrome session、执行该命令并对同一次生成重试一次。`config.json` 已被 `.gitignore` 排除；文件不存在、字段不存在或留空时不会自动切换账号，仍直接返回现有 quota 错误；重试失败后也不会再次切换。
+
+首次生成与切换后的重试各自拥有完整的 `CHATGPT_IMAGE_TIMEOUT_MS` 时间窗。第一次已经消耗的等待时间不会从第二次扣除；每次 generation attempt 都会在自己的结果轮询开始时建立新的 deadline。
+
 工具按顺序返回：
 
 1. JSON 摘要，包括 `job_id`、`surface`、实际 URL、一致性档案启用状态、文件路径、尺寸、MIME 和捕获方式。

@@ -1,5 +1,7 @@
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { UserFacingError } from "./errors.js";
 import {
@@ -12,6 +14,19 @@ import { readLocalSettings } from "./local-settings.js";
 import { isChatGPTProjectUrl } from "./project-page.js";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function readRuntimeConfig(configFile = path.join(PACKAGE_ROOT, "config.json")) {
+  if (!fs.existsSync(configFile)) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(configFile, "utf8"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    throw new UserFacingError("config.json must contain valid JSON", "INVALID_CONFIG");
+  }
+}
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === "") {
@@ -116,6 +131,7 @@ function parseAllowedInputDirs(value, homeDir) {
 
 export function loadConfig(env = process.env, options = {}) {
   const homeDir = options.homeDir || os.homedir();
+  const runtimeConfig = options.runtimeConfig || readRuntimeConfig(options.configFile);
   const allowRemoteCdp = parseBoolean(env.CHATGPT_ALLOW_REMOTE_CDP, false);
   const root = path.join(homeDir, ".chatgpt-web-image-mcp");
   const settingsFile = path.resolve(
@@ -130,6 +146,7 @@ export function loadConfig(env = process.env, options = {}) {
   const defaultUrl = surface === "chat" && projectUrl ? projectUrl : defaultSurfaceUrl(surface);
 
   return {
+    accountSwitchCommand: String(runtimeConfig.accountSwitchCommand || "").trim(),
     allowedInputDirs: parseAllowedInputDirs(env.CHATGPT_IMAGE_ALLOWED_INPUT_DIRS, homeDir),
     allowRemoteCdp,
     cdpUrl: validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp),

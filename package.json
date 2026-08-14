@@ -12,6 +12,7 @@
     "bin",
     "src",
     ".env.example",
+    "config.example.json",
     "LICENSE",
     "README.md",
     "SECURITY.md"

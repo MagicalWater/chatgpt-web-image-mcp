@@ -11,7 +11,7 @@ import {
 
 test("loads safe defaults under the operator home", () => {
   const homeDir = path.resolve("/tmp/operator");
-  const config = loadConfig({}, { homeDir });
+  const config = loadConfig({}, { homeDir, runtimeConfig: {} });
   assert.equal(config.chatgptUrl, "https://chatgpt.com/");
   assert.equal(config.surface, "chat");
   assert.equal(config.projectUrl, "");
@@ -23,6 +23,15 @@ test("loads safe defaults under the operator home", () => {
     path.join(homeDir, ".chatgpt-web-image-mcp", "chrome-profile"),
   );
   assert.deepEqual(config.allowedInputDirs, []);
+  assert.equal(config.accountSwitchCommand, "");
+});
+
+test("loads the optional account switch command from runtime config", () => {
+  const config = loadConfig({}, {
+    homeDir: "/tmp/operator",
+    runtimeConfig: { accountSwitchCommand: "C:\\tools\\switch.cmd" },
+  });
+  assert.equal(config.accountSwitchCommand, "C:\\tools\\switch.cmd");
 });
 
 test("selects the dedicated Images URL from configuration", () => {

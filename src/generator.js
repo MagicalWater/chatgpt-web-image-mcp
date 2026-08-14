@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 
 import { BrowserSession } from "./browser-session.js";
 import { composeGenerationPrompt, resolveConsistencyProfiles } from "./consistency-profiles.js";
@@ -10,6 +11,30 @@ import { ProjectManager } from "./project-manager.js";
 import { createSurfaceAdapter } from "./surface-adapters.js";
 import { resolveSurfaceTarget } from "./surface-config.js";
 import { normalizeSourceImages } from "./validation.js";
+
+export function runWindowsAccountSwitcher(command) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("cmd.exe", ["/d", "/s", "/c", "call", command], {
+      windowsHide: false,
+      // The operator-facing .cmd pauses on failure. Do not give an automated
+      // caller an interactive stdin handle or a failed switch could hang the MCP.
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `ChatGPT account switch command failed (code=${code ?? "null"}, signal=${signal ?? "none"}).`,
+        ),
+      );
+    });
+  });
+}
 
 function jobDirectoryName(jobId) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -23,6 +48,8 @@ export class ImageGenerator {
     this.captureImages = dependencies.captureImages || captureImages;
     this.projectManager =
       dependencies.projectManager || new ProjectManager(config, this.session, dependencies.projectManagerDependencies);
+    this.accountSwitcher =
+      dependencies.accountSwitcher || (() => runWindowsAccountSwitcher(this.config.accountSwitchCommand));
     this.tail = Promise.resolve();
   }
 
@@ -58,6 +85,24 @@ export class ImageGenerator {
   }
 
   async runGeneration(input) {
+    try {
+      return await this.runGenerationAttempt(input);
+    } catch (error) {
+      if (
+        error?.code !== "IMAGE_GENERATION_QUOTA_EXHAUSTED" ||
+        process.platform !== "win32" ||
+        !this.config.accountSwitchCommand
+      ) {
+        throw error;
+      }
+
+      await this.session.close();
+      await this.accountSwitcher();
+      return this.runGenerationAttempt(input);
+    }
+  }
+
+  async runGenerationAttempt(input) {
     const profiles = resolveConsistencyProfiles(this.config, input);
     const prompt = composeGenerationPrompt(input?.prompt, profiles);
     const sourceImages = await normalizeSourceImages(input?.source_images, this.config);
