@@ -7,14 +7,16 @@ import {
   asAutomationPhaseError,
   candidateKey,
   ChatGPTPage,
+  classifyNonImageAssistantReply,
   compactImageSource,
   dismissRateLimitDialog,
   diffCandidates,
   isGeneratedImageCandidate,
+  sanitizeAssistantDiagnostic,
   submitPrompt,
   waitForGeneratedImages,
 } from "../src/chatgpt-page.js";
-import { UserFacingError } from "../src/errors.js";
+import { safeError, UserFacingError } from "../src/errors.js";
 import { IMAGES_SURFACE_SELECTORS } from "../src/images-page.js";
 
 function fakePage({ guestStates = [false] } = {}) {
@@ -236,6 +238,134 @@ test("quota text classifier keeps only the quota cooldown diagnostic", () => {
   assert.equal(result?.quotaExhausted, true);
   assert.match(result?.quotaMessage || "", /3 小時/);
   assert.doesNotMatch(result?.quotaMessage || "", /PT 說|ChatGPT 可能會出錯/);
+});
+
+test("non-image assistant classifier recognizes an explicit source-image request", () => {
+  const result = classifyNonImageAssistantReply(
+    "Please upload the source images you want used as references. Once they’re attached, I can generate the requested composition.",
+  );
+  assert.equal(result.terminal, true);
+  assert.equal(result.code, "IMAGE_GENERATION_INPUT_REQUIRED");
+  assert.match(result.assistantReply, /Please upload the source images/);
+});
+
+test("assistant diagnostic is bounded and strips control characters", () => {
+  const result = sanitizeAssistantDiagnostic(`reply\u0000 ${"x".repeat(5000)}`);
+  assert.ok(result.length <= 4000);
+  assert.doesNotMatch(result, /\u0000/);
+});
+
+test("sanitized user-facing errors expose the bounded assistant reply as structured diagnostics", () => {
+  const safe = safeError(new UserFacingError(
+    "ChatGPT requested more input.",
+    "IMAGE_GENERATION_INPUT_REQUIRED",
+    { assistantReply: "Please upload the source images.\u0000" },
+  ));
+  assert.equal(safe.code, "IMAGE_GENERATION_INPUT_REQUIRED");
+  assert.equal(safe.assistant_reply, "Please upload the source images.");
+});
+
+test("result polling fails fast on a new non-image assistant reply and returns its diagnostic", async () => {
+  let virtualNow = 0;
+  let scanCalls = 0;
+  let generatingReads = 0;
+  let replyReads = 0;
+  const page = {
+    async evaluate() {
+      return [];
+    },
+    locator(selector) {
+      assert.equal(selector, "generating");
+      return {
+        async count() {
+          generatingReads += 1;
+          return generatingReads === 1 ? 1 : 0;
+        },
+      };
+    },
+    async waitForTimeout(ms) {
+      virtualNow += ms;
+    },
+  };
+
+  await assert.rejects(
+    waitForGeneratedImages(
+      page,
+      new Set(),
+      20,
+      4,
+      { image: "image", generating: "generating" },
+      {
+        beforeAssistantReplies: new Set(["Older harmless assistant reply"]),
+        async listAssistantReplies() {
+          replyReads += 1;
+          return [
+            "Older harmless assistant reply",
+            replyReads === 1
+              ? "Please upload the source images you want used as refere"
+              : "Please upload the source images you want used as references. Once they are attached, I can generate the image.",
+          ];
+        },
+        async listCandidates() {
+          scanCalls += 1;
+          return [];
+        },
+        now: () => virtualNow,
+        pollMs: 1,
+        stableMs: 0,
+      },
+    ),
+    (error) => {
+      assert.equal(error.code, "IMAGE_GENERATION_INPUT_REQUIRED");
+      assert.match(error.message, /Once they are attached/);
+      assert.match(error.assistantReply, /Once they are attached/);
+      return true;
+    },
+  );
+  assert.equal(scanCalls, 1);
+});
+
+test("result timeout preserves the latest new assistant reply even when it is not a known fail-fast class", async () => {
+  let virtualNow = 0;
+  const page = {
+    async evaluate() {
+      return [];
+    },
+    locator() {
+      return { async count() { return 0; } };
+    },
+    async waitForTimeout(ms) {
+      virtualNow += ms;
+    },
+  };
+
+  await assert.rejects(
+    waitForGeneratedImages(
+      page,
+      new Set(),
+      3,
+      4,
+      { image: "image", generating: "generating" },
+      {
+        beforeAssistantReplies: new Set(),
+        async listAssistantReplies() {
+          return ["I could not complete that request in the requested form."];
+        },
+        async listCandidates() {
+          return [];
+        },
+        now: () => virtualNow,
+        pollMs: 1,
+        stableMs: 0,
+      },
+    ),
+    (error) => {
+      assert.equal(error.code, "IMAGE_GENERATION_TIMEOUT");
+      assert.equal(error.assistantReply, "I could not complete that request in the requested form.");
+      assert.match(error.message, /Last assistant reply/);
+      return true;
+    },
+  );
 });
 
 test("Images surface restricts generated-image capture to imagegen result containers", () => {

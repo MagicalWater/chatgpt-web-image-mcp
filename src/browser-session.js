@@ -65,7 +65,7 @@ export class BrowserSession {
 
       await fs.mkdir(this.config.chromeUserDataDir, { recursive: true, mode: 0o700 });
       this.profileLease = await this.acquireProfileLease(this.config.chromeUserDataDir, {
-        timeoutMs: this.config.timeoutMs,
+        timeoutMs: this.config.profileLeaseTimeoutMs,
       });
       try {
         this.context = await this.launchPersistentContext(this.config.chromeUserDataDir, {

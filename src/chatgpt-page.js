@@ -125,6 +125,54 @@ export async function throwIfImageGenerationQuotaExhausted(page) {
   }
 }
 
+const MAX_ASSISTANT_DIAGNOSTIC_CHARS = 4000;
+
+export function sanitizeAssistantDiagnostic(value, maxChars = MAX_ASSISTANT_DIAGNOSTIC_CHARS) {
+  const text = String(value || "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars - 1)}…`;
+}
+
+export function classifyNonImageAssistantReply(value) {
+  const assistantReply = sanitizeAssistantDiagnostic(value);
+  const lower = assistantReply.toLowerCase();
+  const sourceRequired =
+    /please (?:first )?upload (?:the )?source images?/.test(lower) ||
+    /upload (?:the )?source images? you want used as references?/.test(lower) ||
+    /請(?:先)?上傳[^。！？.!?]{0,80}(?:來源|參考)?圖片/.test(assistantReply) ||
+    /请(?:先)?上传[^。！？.!?]{0,80}(?:来源|参考)?图片/.test(assistantReply);
+  if (!sourceRequired) {
+    return { terminal: false };
+  }
+  return {
+    terminal: true,
+    code: "IMAGE_GENERATION_INPUT_REQUIRED",
+    assistantReply,
+  };
+}
+
+async function listVisibleAssistantReplies(page) {
+  return page.evaluate(() => {
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    };
+    const normalize = (value) => String(value || "").trim().replace(/\s+/g, " ");
+    const replies = [];
+    for (const message of document.querySelectorAll("[data-message-author-role='assistant']")) {
+      if (!visible(message)) continue;
+      const text = normalize(message.textContent);
+      if (!text) continue;
+      replies.push(text);
+    }
+    return replies;
+  });
+}
+
 export const IMAGE_SELECTOR = "main img, [role='main'] img, article img";
 export const CHAT_SURFACE_SELECTORS = Object.freeze({
   prompt: [
@@ -322,6 +370,8 @@ export async function waitForGeneratedImages(
   dependencies = {},
 ) {
   const listCandidates = dependencies.listCandidates || listImageCandidates;
+  const listAssistantReplies = dependencies.listAssistantReplies || listVisibleAssistantReplies;
+  const beforeAssistantReplies = dependencies.beforeAssistantReplies;
   const now = dependencies.now || Date.now;
   const pollMs = dependencies.pollMs ?? 1000;
   const stableMs = dependencies.stableMs ?? 4000;
@@ -329,10 +379,32 @@ export async function waitForGeneratedImages(
   let stableSignature = "";
   let stableSince = 0;
   let lastScanError = null;
+  let latestAssistantReply = "";
 
   while (now() < deadline) {
     await throwIfImageGenerationQuotaExhausted(page);
     await dismissRateLimitDialog(page);
+    const generating = await page
+      .locator(selectors.generating)
+      .count()
+      .catch(() => 0);
+    if (beforeAssistantReplies instanceof Set) {
+      const replies = await listAssistantReplies(page).catch(() => []);
+      const freshReplies = replies
+        .map((reply) => sanitizeAssistantDiagnostic(reply))
+        .filter((reply) => reply && !beforeAssistantReplies.has(reply));
+      latestAssistantReply = freshReplies.at(-1) || latestAssistantReply;
+      const terminalReply = freshReplies
+        .map(classifyNonImageAssistantReply)
+        .find((candidate) => candidate.terminal);
+      if (terminalReply?.terminal && !generating) {
+        throw new UserFacingError(
+          `ChatGPT did not start image generation and requested additional input. Assistant reply: ${terminalReply.assistantReply}`,
+          terminalReply.code,
+          { assistantReply: terminalReply.assistantReply },
+        );
+      }
+    }
     let scanned;
     try {
       scanned = await listCandidates(page, selectors.image || IMAGE_SELECTOR);
@@ -351,10 +423,6 @@ export async function waitForGeneratedImages(
       stableSince = signature ? now() : 0;
     }
 
-    const generating = await page
-      .locator(selectors.generating)
-      .count()
-      .catch(() => 0);
     if (candidates.length && !generating && now() - stableSince >= stableMs) {
       return candidates;
     }
@@ -367,10 +435,12 @@ export async function waitForGeneratedImages(
       { cause: lastScanError },
     );
   }
-  throw new UserFacingError(
-    "Timed out waiting for a newly generated image in ChatGPT.",
-    "IMAGE_GENERATION_TIMEOUT",
-  );
+  const message = latestAssistantReply
+    ? `Timed out waiting for a newly generated image in ChatGPT. Last assistant reply: ${latestAssistantReply}`
+    : "Timed out waiting for a newly generated image in ChatGPT.";
+  throw new UserFacingError(message, "IMAGE_GENERATION_TIMEOUT", {
+    assistantReply: latestAssistantReply,
+  });
 }
 
 export class ChatGPTPage {
@@ -398,9 +468,13 @@ export class ChatGPTPage {
     const promptBox = await findPromptBox(this.page, this.selectors);
     await uploadSourceImages(this.page, sourceImages, this.selectors);
     let beforeKeys;
+    let beforeAssistantReplies = null;
     try {
       beforeKeys = new Set(
         (await listImageCandidates(this.page, this.selectors.image || IMAGE_SELECTOR)).map(candidateKey),
+      );
+      beforeAssistantReplies = new Set(
+        (await listVisibleAssistantReplies(this.page)).map((reply) => sanitizeAssistantDiagnostic(reply)),
       );
     } catch (error) {
       throw asAutomationPhaseError(
@@ -434,6 +508,7 @@ export class ChatGPTPage {
         this.config.timeoutMs,
         this.config.maxImages,
         this.selectors,
+        { beforeAssistantReplies },
       );
     } catch (error) {
       throw asAutomationPhaseError(

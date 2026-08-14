@@ -168,6 +168,8 @@ node bin/chatgpt-web-image.js generate \
 
 仅支持真实 PNG、JPEG、WebP 文件；扩展名伪装不会通过校验。
 
+仅在 `prompt` 文字中写“使用已上传图片 / use the uploaded source images”**不会**自动附加任何文件。调用者必须把实际本地图片路径放进 `source_images`（CLI 对应重复的 `--source`），且这些路径必须通过输入白名单与真实图片签名校验。若调用者没有传 `source_images`，MCP 会按“无 source image 的普通文字请求”提交；ChatGPT 若因此明确要求补传图片，当前 fork 会将该 assistant 回复作为 `IMAGE_GENERATION_INPUT_REQUIRED` fail-fast 返回，而不会伪装成已经完成上传。
+
 ## MCP 接入
 
 先在仓库中执行 `npm install` 和 `npm run login`。然后把 MCP server 配到本地 AI 客户端。
@@ -281,6 +283,12 @@ Windows / macOS 可选账号切换配置同样位于仓库根目录的本地 `co
 
 如果生成过程中 ChatGPT 才显示“太多要求 / Too many requests”，工具会自动按下确认按钮并继续等待同一次生成结果，不会仅因为这个可关闭对话框就让当前生成失败。
 
+如果 ChatGPT 明确返回了一则文字回复，表明本次图片生成并未开始（例如要求先补传必要的 source image），目标行为是将其视为 terminal generation failure，而不是继续等待到图片生成超时。此类错误对 MCP 调用者只返回与失败直接相关的、经过清洗且有长度上限的可见 assistant 回复或片段；不会返回整页 DOM、完整会话历史、浏览器状态、Cookie、token、环境变量、profile 内容或 stack trace。这个 fail-fast 行为目前记录为本 fork 的 open corrective，尚未宣告 production acceptance。
+
+对于 MCP 自己启动的 dedicated Chrome profile，目标行为是 terminal generation failure（包括结果超时）在调用结束前释放该次调用持有的浏览器/profile ownership，避免后续独立 MCP process 因 profile lease 仍被占用而阻塞。CDP 模式连接的是操作者拥有的浏览器，不应因生成失败而主动关闭该浏览器。该 cleanup contract 同样属于当前 open corrective，完成实现与验证前不要视为已接受行为。
+
+为避免 profile 已被另一个仍存活的 MCP runtime 占用时，`check` / 新 generation 也跟着等待完整图片生成时限，本 fork 将 profile lease acquisition 使用独立的短时限 `CHATGPT_BROWSER_PROFILE_LEASE_TIMEOUT_MS`（默认 15000 ms）。图片结果轮询的默认 `CHATGPT_IMAGE_TIMEOUT_MS` 为 540000 ms，刻意低于当前 600000 ms production tool-call 上限，以保留浏览器清理与错误传播时间；显式改变外层调用时限时仍应维持“内部 generation deadline < 外层 transport deadline”的关系。
+
 ## 使用 CDP 连接现有专用 Chrome
 
 如果你不希望 MCP 自己启动 Chrome，可以手动启动一个专用调试实例：
@@ -341,6 +349,7 @@ node bin/chatgpt-web-image.js generate --surface images --prompt "生成一个�
 - 文字档案和项目上下文能提高连续性，但网页生图不提供身份锁定保证；要求高一致性时，应在允许目录中提供同一张人物参考图，并在连续请求中复用。
 - ChatGPT Projects 的按钮和字段会随网页版本或语言变化；当前自动创建支持中文和英文界面。
 - 验证码、二次登录、地区限制、账号额度和内容安全拦截需要操作者在可见浏览器中处理。
+- 如果 ChatGPT 只返回文字而没有开始图片生成，工具应 fail-fast 并返回经过清洗的相关 assistant 回复/片段；当前 fork 正在补齐该 terminal-reply 分类与 timeout cleanup 的 production corrective。
 - 网页端不提供稳定的模型响应元数据，本工具不会声称验证了底层具体模型。
 - CDP 模式不会主动关闭操作者的 Chrome；专用 profile 模式在 CLI/MCP 正常退出时会关闭自己启动的窗口。
 

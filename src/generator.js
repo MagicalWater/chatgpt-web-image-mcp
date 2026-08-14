@@ -106,12 +106,18 @@ export class ImageGenerator {
         !["win32", "darwin"].includes(process.platform) ||
         !this.config.accountSwitchCommand
       ) {
+        await this.session.close().catch(() => {});
         throw error;
       }
 
       await this.session.close();
       await this.accountSwitcher();
-      return this.runGenerationAttempt(input);
+      try {
+        return await this.runGenerationAttempt(input);
+      } catch (retryError) {
+        await this.session.close().catch(() => {});
+        throw retryError;
+      }
     }
   }
 

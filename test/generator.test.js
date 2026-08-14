@@ -108,7 +108,13 @@ test("second quota exhaustion is returned without another account switch", async
 
 test("non-quota failures do not switch account", async () => {
   let switches = 0;
+  let closes = 0;
   const generator = createGenerator({
+    session: {
+      async close() {
+        closes += 1;
+      },
+    },
     async accountSwitcher() {
       switches += 1;
     },
@@ -122,6 +128,29 @@ test("non-quota failures do not switch account", async () => {
     (error) => error?.code === "IMAGE_GENERATION_TIMEOUT",
   );
   assert.equal(switches, 0);
+  assert.equal(closes, 1);
+});
+
+test("cleanup failure does not replace the original terminal generation error", async () => {
+  const generator = createGenerator({
+    session: {
+      async close() {
+        throw new Error("sensitive cleanup detail");
+      },
+    },
+  });
+  generator.runGenerationAttempt = async () => {
+    throw new UserFacingError("timed out", "IMAGE_GENERATION_TIMEOUT");
+  };
+
+  await assert.rejects(
+    () => generator.runGeneration({ prompt: "test" }),
+    (error) => {
+      assert.equal(error.code, "IMAGE_GENERATION_TIMEOUT");
+      assert.equal(error.message, "timed out");
+      return true;
+    },
+  );
 });
 
 test("Windows account switch command supports spaces and waits for the cmd script exit code", async (t) => {

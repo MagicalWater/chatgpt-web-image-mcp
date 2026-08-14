@@ -83,6 +83,30 @@ test("persistent browser context holds lease until normal close", async () => {
   assert.equal(released, 1);
 });
 
+test("persistent browser acquisition uses the bounded profile lease timeout instead of generation timeout", async () => {
+  let observedTimeout = null;
+  const session = new BrowserSession(
+    {
+      chromeUserDataDir: "C:/profile",
+      chromeChannel: "chrome",
+      headless: false,
+      timeoutMs: 540000,
+      profileLeaseTimeoutMs: 15000,
+    },
+    {
+      acquireProfileLease: async (_dir, options) => {
+        observedTimeout = options.timeoutMs;
+        return { async release() {} };
+      },
+      launchPersistentContext: async () => ({ async close() {} }),
+    },
+  );
+
+  await session.getContext();
+  assert.equal(observedTimeout, 15000);
+  await session.close();
+});
+
 test("CDP mode does not acquire a persistent-profile lease", async () => {
   let acquired = 0;
   const context = {};

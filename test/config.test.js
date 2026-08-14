@@ -41,6 +41,8 @@ test("loads safe defaults with an explicitly configured dedicated profile", () =
   assert.equal(config.chromeUserDataDir, path.resolve(TEST_PROFILE));
   assert.deepEqual(config.allowedInputDirs, []);
   assert.equal(config.accountSwitchCommand, "");
+  assert.equal(config.timeoutMs, 540000);
+  assert.equal(config.profileLeaseTimeoutMs, 15000);
 });
 
 test("runtime config pins the dedicated profile ahead of an enrollment environment value", () => {

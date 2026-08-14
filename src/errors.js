@@ -3,12 +3,23 @@ export class UserFacingError extends Error {
     super(message, options);
     this.name = "UserFacingError";
     this.code = code;
+    if (typeof options.assistantReply === "string" && options.assistantReply.trim()) {
+      this.assistantReply = options.assistantReply
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 4000);
+    }
   }
 }
 
 export function safeError(error) {
   if (error instanceof UserFacingError) {
-    return { code: error.code, message: error.message };
+    const safe = { code: error.code, message: error.message };
+    if (error.assistantReply) {
+      safe.assistant_reply = error.assistantReply;
+    }
+    return safe;
   }
 
   const message = String(error?.message || "");

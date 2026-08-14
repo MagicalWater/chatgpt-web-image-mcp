@@ -185,6 +185,13 @@ export function loadConfig(env = process.env, options = {}) {
       100 * 1024 * 1024,
       "CHATGPT_SOURCE_IMAGE_MAX_BYTES",
     ),
+    profileLeaseTimeoutMs: parseInteger(
+      env.CHATGPT_BROWSER_PROFILE_LEASE_TIMEOUT_MS,
+      15000,
+      1000,
+      120000,
+      "CHATGPT_BROWSER_PROFILE_LEASE_TIMEOUT_MS",
+    ),
     outputDir: path.resolve(
       expandHome(env.CHATGPT_IMAGE_OUTPUT_DIR || path.join(root, "outputs"), homeDir),
     ),
@@ -200,7 +207,7 @@ export function loadConfig(env = process.env, options = {}) {
     surface,
     timeoutMs: parseInteger(
       env.CHATGPT_IMAGE_TIMEOUT_MS,
-      600000,
+      540000,
       30000,
       1800000,
       "CHATGPT_IMAGE_TIMEOUT_MS",
