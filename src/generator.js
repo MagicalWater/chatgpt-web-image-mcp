@@ -12,12 +12,25 @@ import { createSurfaceAdapter } from "./surface-adapters.js";
 import { resolveSurfaceTarget } from "./surface-config.js";
 import { normalizeSourceImages } from "./validation.js";
 
-export function runWindowsAccountSwitcher(command) {
+export function runAccountSwitcher(command, platform = process.platform) {
   return new Promise((resolve, reject) => {
-    const child = spawn("cmd.exe", ["/d", "/s", "/c", "call", command], {
-      windowsHide: false,
-      // The operator-facing .cmd pauses on failure. Do not give an automated
-      // caller an interactive stdin handle or a failed switch could hang the MCP.
+    let executable;
+    let args;
+    if (platform === "win32") {
+      executable = "cmd.exe";
+      args = ["/d", "/s", "/c", "call", command];
+    } else if (platform === "darwin") {
+      executable = "/bin/zsh";
+      args = [command];
+    } else {
+      reject(new Error(`ChatGPT account switching is unsupported on platform: ${platform}`));
+      return;
+    }
+
+    const child = spawn(executable, args, {
+      windowsHide: platform === "win32" ? false : undefined,
+      // Operator-facing switch wrappers may pause or prompt on failure. Do not
+      // give an automated caller an interactive stdin handle or the MCP could hang.
       stdio: ["ignore", "inherit", "inherit"],
     });
 
@@ -49,7 +62,7 @@ export class ImageGenerator {
     this.projectManager =
       dependencies.projectManager || new ProjectManager(config, this.session, dependencies.projectManagerDependencies);
     this.accountSwitcher =
-      dependencies.accountSwitcher || (() => runWindowsAccountSwitcher(this.config.accountSwitchCommand));
+      dependencies.accountSwitcher || (() => runAccountSwitcher(this.config.accountSwitchCommand));
     this.tail = Promise.resolve();
   }
 
@@ -90,7 +103,7 @@ export class ImageGenerator {
     } catch (error) {
       if (
         error?.code !== "IMAGE_GENERATION_QUOTA_EXHAUSTED" ||
-        process.platform !== "win32" ||
+        !["win32", "darwin"].includes(process.platform) ||
         !this.config.accountSwitchCommand
       ) {
         throw error;

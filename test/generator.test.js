@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { ImageGenerator, runWindowsAccountSwitcher } from "../src/generator.js";
+import { ImageGenerator, runAccountSwitcher } from "../src/generator.js";
 import { UserFacingError } from "../src/errors.js";
 
 function createGenerator({ accountSwitcher, session, accountSwitchCommand = "C:\\switch.cmd" } = {}) {
@@ -24,9 +24,9 @@ function createGenerator({ accountSwitcher, session, accountSwitchCommand = "C:\
   });
 }
 
-test("quota exhaustion closes the browser, switches account, and retries once on Windows", async (t) => {
-  if (process.platform !== "win32") {
-    t.skip("Windows-only account switch contract");
+test("quota exhaustion closes the browser, switches account, and retries once on supported platforms", async (t) => {
+  if (!["win32", "darwin"].includes(process.platform)) {
+    t.skip("account switch retry is supported only on Windows and macOS");
     return;
   }
 
@@ -81,8 +81,8 @@ test("quota exhaustion does not switch or retry when no account switch command i
 });
 
 test("second quota exhaustion is returned without another account switch", async (t) => {
-  if (process.platform !== "win32") {
-    t.skip("Windows-only account switch contract");
+  if (!["win32", "darwin"].includes(process.platform)) {
+    t.skip("account switch retry is supported only on Windows and macOS");
     return;
   }
 
@@ -139,6 +139,25 @@ test("Windows account switch command supports spaces and waits for the cmd scrip
   await fs.writeFile(failure, "@echo off\r\nexit /b 7\r\n");
   t.after(() => fs.rm(root, { recursive: true, force: true }));
 
-  await runWindowsAccountSwitcher(success);
-  await assert.rejects(() => runWindowsAccountSwitcher(failure), /code=7/);
+  await runAccountSwitcher(success, "win32");
+  await assert.rejects(() => runAccountSwitcher(failure, "win32"), /code=7/);
+});
+
+test("macOS account switch command supports spaces and waits for the command exit code", async (t) => {
+  if (process.platform !== "darwin") {
+    t.skip("macOS-only command contract");
+    return;
+  }
+
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "chatgpt-account-switch-test-"));
+  const dir = path.join(root, "path with spaces");
+  await fs.mkdir(dir);
+  const success = path.join(dir, "success.command");
+  const failure = path.join(dir, "failure.command");
+  await fs.writeFile(success, "#!/bin/zsh\nexit 0\n");
+  await fs.writeFile(failure, "#!/bin/zsh\nexit 7\n");
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+
+  await runAccountSwitcher(success, "darwin");
+  await assert.rejects(() => runAccountSwitcher(failure, "darwin"), /code=7/);
 });

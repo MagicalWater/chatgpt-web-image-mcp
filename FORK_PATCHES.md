@@ -63,17 +63,17 @@ Cross-platform status:
 - Windows verification after fast-forward to `87d504c`: full suite 71/71 PASS; `npm run check` PASS; `npm pack --dry-run` PASS.
 - Fresh macOS production acceptance: the production Executor route returned terminal `IMAGE_GENERATION_QUOTA_EXHAUSTED` with no image content instead of timing out. The diagnostic-hygiene follow-up retained the visible cooldown detail while trimming unrelated surrounding page text, and the repeated production probe returned the same terminal code.
 
-### Optional Windows account-switch retry after quota exhaustion
+### Optional account-switch retry after quota exhaustion
 
 - Scope: optional orchestration only; no selector/classifier changes.
 - Configuration: local ignored root `config.json` field `accountSwitchCommand`; `config.example.json` is the committed template. Missing/blank disables account switching and preserves the original quota error behavior.
 - Dedicated-profile configuration: local `config.json` field `chromeUserDataDir` (or explicit `CHATGPT_CHROME_USER_DATA_DIR`) is required when CDP is not used. There is no implicit home-directory profile fallback; missing configuration fails with `INVALID_CONFIG`.
 - If unset/empty: preserve the existing `IMAGE_GENERATION_QUOTA_EXHAUSTED` terminal failure behavior with no account switch.
-- If configured on Windows: after the first explicit quota-exhaustion failure, release the MCP-owned browser session, invoke the configured `.cmd`, then retry the same generation once.
+- If configured on Windows or macOS: after the first explicit quota-exhaustion failure, release the MCP-owned browser session, invoke the configured local switch wrapper (`.cmd` on Windows, `.command` on macOS), then retry the same generation once.
 - Retry boundary: never switch or retry more than once for the same generation call; any second failure follows the existing error contract.
 - Timeout boundary: the first generation attempt and the post-switch retry each receive a fresh full `CHATGPT_IMAGE_TIMEOUT_MS` result-polling window; elapsed time from the first attempt is not deducted from the retry.
 - Windows production acceptance (2026-08-14): fresh Executor discovery resolved `chatgpt-web-image.org.default.generate_chatgpt_web_image`. Before the call, account-switcher dry-run reported account 2 as next; the single production generation call returned one native image successfully; after the call, dry-run reported account 3 as next. This proves the first quota-exhausted attempt invoked the switcher exactly once, advanced to account 2, and the post-switch retry succeeded without a second switch.
-- Non-goals: no changes to quota detection wording/selectors, request-frequency dialog handling, source-image rules, or macOS behavior.
+- Non-goals: no changes to quota detection wording/selectors, request-frequency dialog handling, or source-image rules.
 
 ## Patch-governance rule
 
