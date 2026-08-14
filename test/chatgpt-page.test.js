@@ -249,6 +249,45 @@ test("non-image assistant classifier recognizes an explicit source-image request
   assert.match(result.assistantReply, /Please upload the source images/);
 });
 
+test("non-image assistant classifier recognizes a refusal to proceed until source images are attached", () => {
+  const result = classifyNonImageAssistantReply(
+    "Understood. I’ll use the attached source images as strict references and will not proceed unless the source images are actually attached and accessible in this request.",
+  );
+  assert.equal(result.terminal, true);
+  assert.equal(result.code, "IMAGE_GENERATION_INPUT_REQUIRED");
+  assert.match(result.assistantReply, /will not proceed unless/);
+});
+
+test("non-image assistant classifier recognizes an attach-first refusal with curly apostrophe", () => {
+  const result = classifyNonImageAssistantReply(
+    "Please attach the source images first. I won’t proceed with the image generation/editing until the source images are actually attached to this request.",
+  );
+  assert.equal(result.terminal, true);
+  assert.equal(result.code, "IMAGE_GENERATION_INPUT_REQUIRED");
+  assert.match(result.assistantReply, /Please attach the source images first/);
+});
+
+test("non-image assistant classifier does not reject a normal source-image acknowledgement", () => {
+  const result = classifyNonImageAssistantReply(
+    "Understood. I’ll use the attached source images as strict references and proceed with the requested generation.",
+  );
+  assert.equal(result.terminal, false);
+});
+
+test("non-image assistant classifier does not reject unavailable sources when ChatGPT says it can proceed", () => {
+  const result = classifyNonImageAssistantReply(
+    "The source images are not available in this conversation, but I can proceed without them.",
+  );
+  assert.equal(result.terminal, false);
+});
+
+test("non-image assistant classifier does not reject a positive Chinese acknowledgement", () => {
+  const result = classifyNonImageAssistantReply(
+    "參考圖片沒有問題，可以繼續進行生成。",
+  );
+  assert.equal(result.terminal, false);
+});
+
 test("assistant diagnostic is bounded and strips control characters", () => {
   const result = sanitizeAssistantDiagnostic(`reply\u0000 ${"x".repeat(5000)}`);
   assert.ok(result.length <= 4000);

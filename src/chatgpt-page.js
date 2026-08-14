@@ -139,11 +139,23 @@ export function sanitizeAssistantDiagnostic(value, maxChars = MAX_ASSISTANT_DIAG
 export function classifyNonImageAssistantReply(value) {
   const assistantReply = sanitizeAssistantDiagnostic(value);
   const lower = assistantReply.toLowerCase();
+  const englishSourceMention = /(?:source|reference) images?/.test(lower);
+  const englishAttachmentMention =
+    /(?:attach(?:ed|ment)?|upload(?:ed)?|accessible|available|provided|missing|absent)/.test(lower);
+  const englishBlockedForInput =
+    /(?:will not|won['’]t|cannot|can['’]t|unable to|do not|don['’]t) (?:proceed|continue)/.test(lower);
+  const chineseSourceMention = /(?:來源|来源|參考|参考)圖片/.test(assistantReply);
+  const chineseAttachmentMention =
+    /(?:上傳|上传|附加|附件|提供|存取|访问|可用|缺少|未附|沒有附|没有附)/.test(assistantReply);
+  const chineseBlockedForInput =
+    /(?:不會|不会|不能|無法|无法)[^。！？]{0,30}(?:繼續|继续|進行|进行)/.test(assistantReply);
   const sourceRequired =
-    /please (?:first )?upload (?:the )?source images?/.test(lower) ||
+    /please (?:first )?(?:upload|attach) (?:the )?source images?(?: first)?/.test(lower) ||
     /upload (?:the )?source images? you want used as references?/.test(lower) ||
-    /請(?:先)?上傳[^。！？.!?]{0,80}(?:來源|參考)?圖片/.test(assistantReply) ||
-    /请(?:先)?上传[^。！？.!?]{0,80}(?:来源|参考)?图片/.test(assistantReply);
+    (englishSourceMention && englishAttachmentMention && englishBlockedForInput) ||
+    (chineseSourceMention && chineseAttachmentMention && chineseBlockedForInput) ||
+    /請(?:先)?(?:上傳|附加|提供)[^。！？.!?]{0,80}(?:來源|參考)?圖片/.test(assistantReply) ||
+    /请(?:先)?(?:上传|附加|提供)[^。！？.!?]{0,80}(?:来源|参考)?图片/.test(assistantReply);
   if (!sourceRequired) {
     return { terminal: false };
   }
