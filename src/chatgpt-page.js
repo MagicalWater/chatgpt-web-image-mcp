@@ -53,6 +53,8 @@ export function classifyImageGenerationQuotaText(value) {
   const lower = text.toLowerCase();
   const markers = [
     "已用完圖片生成次數",
+    "你的圖像額度已用完",
+    "你的图像额度已用完",
     "you've used all your image generation requests",
     "you have used all your image generation requests",
     "you've reached your image generation limit",
@@ -63,7 +65,10 @@ export function classifyImageGenerationQuotaText(value) {
   if (markerIndex < 0) {
     return { quotaExhausted: false };
   }
-  const isChinese = marker.includes("圖片生成次數");
+  const isChinese =
+    marker.includes("圖片生成次數") ||
+    marker.includes("圖像額度已用完") ||
+    marker.includes("图像额度已用完");
   let end = markerIndex + marker.length;
   if (isChinese) {
     const retryIndex = Math.max(text.indexOf("再試", end), text.indexOf("再试", end));

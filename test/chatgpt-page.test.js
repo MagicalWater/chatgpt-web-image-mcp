@@ -197,6 +197,23 @@ test("quota text classifier recognizes the zh-TW exhaustion message", () => {
   assert.match(result?.quotaMessage || "", /4 小時/);
 });
 
+test("quota text classifier recognizes the new zh-TW image quota card wording", () => {
+  const result = chatgptPageModule.classifyImageGenerationQuotaText(
+    "你的圖像額度已用完 升級方案以取得更多額度、安排稍後生成並接收，或等用量明天下午3:28重設後再試一次。",
+  );
+  assert.equal(result?.quotaExhausted, true);
+  assert.match(result?.quotaMessage || "", /圖像額度已用完/);
+  assert.match(result?.quotaMessage || "", /再試/);
+});
+
+test("quota text classifier recognizes the simplified-Chinese quota card wording", () => {
+  const result = chatgptPageModule.classifyImageGenerationQuotaText(
+    "你的图像额度已用完，请等用量重设后再试一次。",
+  );
+  assert.equal(result?.quotaExhausted, true);
+  assert.match(result?.quotaMessage || "", /图像额度已用完/);
+});
+
 test("quota text classifier recognizes an English exhaustion message", () => {
   const result = chatgptPageModule.classifyImageGenerationQuotaText(
     "You've used all your image generation requests. Try again in about 3 hours.",
