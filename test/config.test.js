@@ -43,6 +43,17 @@ test("loads safe defaults with an explicitly configured dedicated profile", () =
   assert.equal(config.accountSwitchCommand, "");
 });
 
+test("runtime config pins the dedicated profile ahead of an enrollment environment value", () => {
+  const config = loadConfig(
+    { CHATGPT_CHROME_USER_DATA_DIR: "/tmp/stale-enrollment-profile" },
+    {
+      homeDir: "/tmp/operator",
+      runtimeConfig: { chromeUserDataDir: "/tmp/project-pinned-profile" },
+    },
+  );
+  assert.equal(config.chromeUserDataDir, path.resolve("/tmp/project-pinned-profile"));
+});
+
 test("loads the optional account switch command from runtime config", () => {
   const config = loadConfig({}, {
     homeDir: "/tmp/operator",

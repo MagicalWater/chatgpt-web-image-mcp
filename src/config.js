@@ -135,7 +135,7 @@ export function loadConfig(env = process.env, options = {}) {
   const allowRemoteCdp = parseBoolean(env.CHATGPT_ALLOW_REMOTE_CDP, false);
   const cdpUrl = validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp);
   const chromeUserDataDirValue = String(
-    env.CHATGPT_CHROME_USER_DATA_DIR || runtimeConfig.chromeUserDataDir || "",
+    runtimeConfig.chromeUserDataDir || env.CHATGPT_CHROME_USER_DATA_DIR || "",
   ).trim();
   if (!cdpUrl && !chromeUserDataDirValue) {
     throw new UserFacingError(

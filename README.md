@@ -266,7 +266,7 @@ codex mcp add chatgpt-web-image -- \
 
 如果 ChatGPT 明确显示图片生成额度已用完（例如“你目前已用完圖片生成次數，請於約 4 小時內再試”或对应英文提示），本次生成会立即作为 terminal failure 返回 `IMAGE_GENERATION_QUOTA_EXHAUSTED`，而不会继续等待到 `IMAGE_GENERATION_TIMEOUT`。若页面同时提供冷却/重试时间，错误消息会保留该非敏感提示供诊断。这个状态与上面的“太多要求 / Too many requests”请求频率对话框不同；后者仍按既有 contract 安全关闭后继续流程。
 
-本 fork 的 dedicated Chrome profile 必须明确配置，不再静默 fallback 到 `~/.chatgpt-web-image-mcp/chrome-profile`。仓库根目录本地 `config.json` 的 `chromeUserDataDir`，或显式 `CHATGPT_CHROME_USER_DATA_DIR`，至少必须提供一个；CDP mode 除外。缺少 dedicated-profile 配置时会直接返回 `INVALID_CONFIG`，避免 CLI / MCP / preflight 意外使用不同的 Chrome profile。
+本 fork 的 dedicated Chrome profile 必须明确配置，不再静默 fallback 到 `~/.chatgpt-web-image-mcp/chrome-profile`。仓库根目录本地 `config.json` 的 `chromeUserDataDir`，或显式 `CHATGPT_CHROME_USER_DATA_DIR`，至少必须提供一个；CDP mode 除外。若两者同时存在，repo-local `config.json` 优先，以避免历史 enrollment 环境变量把 production route 拉回旧 profile。缺少 dedicated-profile 配置时会直接返回 `INVALID_CONFIG`。
 
 Windows / macOS 可选账号切换配置同样位于仓库根目录的本地 `config.json`。复制 `config.example.json` 为 `config.json`，并设置 `accountSwitchCommand` 为本机账号切换 wrapper 路径（Windows `.cmd`，macOS `.command`）。仅当这个字段非空、且首次生成明确返回 `IMAGE_GENERATION_QUOTA_EXHAUSTED` 时，MCP 才会释放 dedicated Chrome session、执行该命令并对同一次生成重试一次。`config.json` 已被 `.gitignore` 排除；`accountSwitchCommand` 不存在或留空时不会自动切换账号，仍直接返回现有 quota 错误；重试失败后也不会再次切换。
 
