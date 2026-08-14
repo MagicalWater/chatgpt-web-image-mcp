@@ -72,6 +72,7 @@ Cross-platform status:
 - If configured on Windows: after the first explicit quota-exhaustion failure, release the MCP-owned browser session, invoke the configured `.cmd`, then retry the same generation once.
 - Retry boundary: never switch or retry more than once for the same generation call; any second failure follows the existing error contract.
 - Timeout boundary: the first generation attempt and the post-switch retry each receive a fresh full `CHATGPT_IMAGE_TIMEOUT_MS` result-polling window; elapsed time from the first attempt is not deducted from the retry.
+- Windows production acceptance (2026-08-14): fresh Executor discovery resolved `chatgpt-web-image.org.default.generate_chatgpt_web_image`. Before the call, account-switcher dry-run reported account 2 as next; the single production generation call returned one native image successfully; after the call, dry-run reported account 3 as next. This proves the first quota-exhausted attempt invoked the switcher exactly once, advanced to account 2, and the post-switch retry succeeded without a second switch.
 - Non-goals: no changes to quota detection wording/selectors, request-frequency dialog handling, source-image rules, or macOS behavior.
 
 ## Patch-governance rule
