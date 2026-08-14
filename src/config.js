@@ -133,6 +133,16 @@ export function loadConfig(env = process.env, options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const runtimeConfig = options.runtimeConfig || readRuntimeConfig(options.configFile);
   const allowRemoteCdp = parseBoolean(env.CHATGPT_ALLOW_REMOTE_CDP, false);
+  const cdpUrl = validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp);
+  const chromeUserDataDirValue = String(
+    env.CHATGPT_CHROME_USER_DATA_DIR || runtimeConfig.chromeUserDataDir || "",
+  ).trim();
+  if (!cdpUrl && !chromeUserDataDirValue) {
+    throw new UserFacingError(
+      "A dedicated Chrome profile must be configured with config.json chromeUserDataDir or CHATGPT_CHROME_USER_DATA_DIR",
+      "INVALID_CONFIG",
+    );
+  }
   const root = path.join(homeDir, ".chatgpt-web-image-mcp");
   const settingsFile = path.resolve(
     expandHome(env.CHATGPT_SETTINGS_FILE || path.join(root, "settings.json"), homeDir),
@@ -149,16 +159,16 @@ export function loadConfig(env = process.env, options = {}) {
     accountSwitchCommand: String(runtimeConfig.accountSwitchCommand || "").trim(),
     allowedInputDirs: parseAllowedInputDirs(env.CHATGPT_IMAGE_ALLOWED_INPUT_DIRS, homeDir),
     allowRemoteCdp,
-    cdpUrl: validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp),
+    cdpUrl,
     characterProfile: normalizeProfile(
       env.CHATGPT_CHARACTER_PROFILE ?? localSettings.character_profile,
       "CHATGPT_CHARACTER_PROFILE",
     ),
     chatgptUrl: validateChatGPTUrl(env.CHATGPT_WEB_URL || defaultUrl),
     chromeChannel: env.CHATGPT_CHROME_CHANNEL || "chrome",
-    chromeUserDataDir: path.resolve(
-      expandHome(env.CHATGPT_CHROME_USER_DATA_DIR || path.join(root, "chrome-profile"), homeDir),
-    ),
+    chromeUserDataDir: chromeUserDataDirValue
+      ? path.resolve(expandHome(chromeUserDataDirValue, homeDir))
+      : "",
     headless: parseBoolean(env.CHATGPT_HEADLESS, false),
     maxImageBytes: parseInteger(
       env.CHATGPT_IMAGE_MAX_BYTES,

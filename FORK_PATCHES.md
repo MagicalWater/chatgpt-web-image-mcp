@@ -67,6 +67,7 @@ Cross-platform status:
 
 - Scope: optional orchestration only; no selector/classifier changes.
 - Configuration: local ignored root `config.json` field `accountSwitchCommand`; `config.example.json` is the committed template. Missing/blank disables account switching and preserves the original quota error behavior.
+- Dedicated-profile configuration: local `config.json` field `chromeUserDataDir` (or explicit `CHATGPT_CHROME_USER_DATA_DIR`) is required when CDP is not used. There is no implicit home-directory profile fallback; missing configuration fails with `INVALID_CONFIG`.
 - If unset/empty: preserve the existing `IMAGE_GENERATION_QUOTA_EXHAUSTED` terminal failure behavior with no account switch.
 - If configured on Windows: after the first explicit quota-exhaustion failure, release the MCP-owned browser session, invoke the configured `.cmd`, then retry the same generation once.
 - Retry boundary: never switch or retry more than once for the same generation call; any second failure follows the existing error contract.
