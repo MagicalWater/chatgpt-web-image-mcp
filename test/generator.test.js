@@ -131,6 +131,34 @@ test("non-quota failures do not switch account", async () => {
   assert.equal(closes, 1);
 });
 
+test("input-required terminal replies close the browser session before propagating", async () => {
+  let closes = 0;
+  const generator = createGenerator({
+    session: {
+      async close() {
+        closes += 1;
+      },
+    },
+  });
+  generator.runGenerationAttempt = async () => {
+    throw new UserFacingError(
+      "ChatGPT requested source images.",
+      "IMAGE_GENERATION_INPUT_REQUIRED",
+      { assistantReply: "Please upload the source images." },
+    );
+  };
+
+  await assert.rejects(
+    () => generator.runGeneration({ prompt: "test" }),
+    (error) => {
+      assert.equal(error.code, "IMAGE_GENERATION_INPUT_REQUIRED");
+      assert.equal(error.assistantReply, "Please upload the source images.");
+      return true;
+    },
+  );
+  assert.equal(closes, 1);
+});
+
 test("cleanup failure does not replace the original terminal generation error", async () => {
   const generator = createGenerator({
     session: {
