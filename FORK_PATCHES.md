@@ -63,6 +63,7 @@ Cross-platform status:
 - Windows verification after fast-forward to `87d504c`: full suite 71/71 PASS; `npm run check` PASS; `npm pack --dry-run` PASS.
 - Fresh macOS production acceptance: the production Executor route returned terminal `IMAGE_GENERATION_QUOTA_EXHAUSTED` with no image content instead of timing out. The diagnostic-hygiene follow-up retained the visible cooldown detail while trimming unrelated surrounding page text, and the repeated production probe returned the same terminal code.
 - Windows live UI evidence (2026-08-14): ChatGPT introduced a new zh-TW quota card headed `你的圖像額度已用完`, with upgrade / scheduled-generation controls and reset-time guidance. The quota classifier now recognizes that wording (plus the simplified-Chinese equivalent) as `IMAGE_GENERATION_QUOTA_EXHAUSTED`; the request-frequency `太多要求` dialog contract is unchanged.
+- macOS production acceptance for the new quota card (2026-08-14): after syncing `4b9c468`, focused `chatgpt-page` tests were 20/20 PASS and the full suite was 81 PASS, 0 fail, 2 platform skips. On the production **chat surface** matching the Windows live UI, the new `你的圖像額度已用完` card returned terminal `IMAGE_GENERATION_QUOTA_EXHAUSTED` with no image content. Account-switcher dry-run advanced from account 2 as next to account 3 as next across that single production call, proving the new wording triggered exactly one macOS account switch and one retry; the retry also exhausted quota and did not rotate again.
 
 ### Optional account-switch retry after quota exhaustion
 
