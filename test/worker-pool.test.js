@@ -12,6 +12,7 @@ function poolConfig(overrides = {}) {
     ],
     poolWaitMs: 1000,
     poolWorkerLeaseTimeoutMs: 100,
+    poolCursorFile: "/tmp/test-worker-pool-cursor.json",
     ...overrides,
   };
 }
@@ -21,6 +22,7 @@ test("two generation jobs run concurrently on different workers", async () => {
   const releases = [];
   const gates = new Map();
   const pool = new ImageWorkerPool(poolConfig(), {
+    claimWorkerStart: async () => 0,
     createGenerator(config) {
       let release;
       const gate = new Promise((resolve) => { release = resolve; });
@@ -51,6 +53,7 @@ test("two generation jobs run concurrently on different workers", async () => {
 test("a profile-busy worker is skipped in favor of the next worker", async () => {
   const attempts = [];
   const pool = new ImageWorkerPool(poolConfig(), {
+    claimWorkerStart: async () => 0,
     createGenerator(config) {
       return {
         async generate() {
@@ -72,6 +75,7 @@ test("a profile-busy worker is skipped in favor of the next worker", async () =>
 test("a cleanup-blocked worker is skipped in favor of the next worker", async () => {
   const attempts = [];
   const pool = new ImageWorkerPool(poolConfig(), {
+    claimWorkerStart: async () => 0,
     createGenerator(config) {
       return {
         async generate() {
@@ -93,6 +97,7 @@ test("a cleanup-blocked worker is skipped in favor of the next worker", async ()
 test("pool saturation returns BROWSER_POOL_BUSY after the bounded wait", async () => {
   let now = 0;
   const pool = new ImageWorkerPool(poolConfig({ poolWaitMs: 20 }), {
+    claimWorkerStart: async () => 0,
     now: () => now,
     sleep: async (ms) => { now += ms; },
     pollMs: 10,
@@ -115,6 +120,7 @@ test("worker cleanup runs after success and after terminal failure", async () =>
   let closes = 0;
   let calls = 0;
   const pool = new ImageWorkerPool(poolConfig({ workers: [poolConfig().workers[0]] }), {
+    claimWorkerStart: async () => 0,
     createGenerator() {
       return {
         async generate() {
@@ -133,6 +139,7 @@ test("worker cleanup runs after success and after terminal failure", async () =>
 
 test("multi-worker project setup requires an explicit worker", async () => {
   const pool = new ImageWorkerPool(poolConfig(), {
+    claimWorkerStart: async () => 0,
     createGenerator() {
       return { async setupProject() { return { ok: true }; }, async close() {} };
     },
@@ -145,18 +152,21 @@ test("multi-worker project setup requires an explicit worker", async () => {
 
 test("explicit worker diagnostics fail promptly while that worker is locally busy", async () => {
   let release;
+  let started;
   const gate = new Promise((resolve) => { release = resolve; });
+  const startedGate = new Promise((resolve) => { started = resolve; });
   const pool = new ImageWorkerPool(poolConfig(), {
+    claimWorkerStart: async () => 0,
     createGenerator() {
       return {
-        async generate() { await gate; return { ok: true }; },
+        async generate() { started(); await gate; return { ok: true }; },
         async check() { return { ready: true }; },
         async close() {},
       };
     },
   });
   const generation = pool.generate({ prompt: "hold worker-a" });
-  await new Promise((resolve) => setImmediate(resolve));
+  await startedGate;
   await assert.rejects(
     () => pool.check({ worker: "worker-a" }),
     (error) => error?.code === "BROWSER_PROFILE_BUSY",
@@ -171,6 +181,7 @@ test("pool generation rejects account-scoped ChatGPT URLs without affinity", asy
     chatgptUrl: "https://chatgpt.com/images/",
     projectUrl: "",
   }), {
+    claimWorkerStart: async () => 0,
     createGenerator() {
       return { async generate() { return { ok: true }; }, async close() {} };
     },
@@ -183,4 +194,28 @@ test("pool generation rejects account-scoped ChatGPT URLs without affinity", asy
     () => pool.generate({ prompt: "x", chatgpt_url: "https://chatgpt.com/g/g-p-abc/project" }),
     (error) => error?.code === "POOL_AFFINITY_REQUIRED",
   );
+});
+
+test("scheduled checks expose the selected worker for production routing acceptance", async () => {
+  const starts = [0, 1, 2, 0];
+  let claim = 0;
+  const workers = [
+    { id: "worker-a", chromeUserDataDir: "/tmp/a", accountSwitchCommand: "/tmp/a.command" },
+    { id: "worker-b", chromeUserDataDir: "/tmp/b", accountSwitchCommand: "/tmp/b.command" },
+    { id: "worker-c", chromeUserDataDir: "/tmp/c", accountSwitchCommand: "/tmp/c.command" },
+  ];
+  const pool = new ImageWorkerPool(poolConfig({ workers }), {
+    claimWorkerStart: async () => starts[claim++],
+    createGenerator(config) {
+      return {
+        async check() { return { ready: true, profile: config.chromeUserDataDir }; },
+        async close() {},
+      };
+    },
+  });
+
+  assert.equal((await pool.check()).worker, "worker-a");
+  assert.equal((await pool.check()).worker, "worker-b");
+  assert.equal((await pool.check()).worker, "worker-c");
+  assert.equal((await pool.check()).worker, "worker-a");
 });

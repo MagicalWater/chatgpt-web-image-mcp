@@ -57,7 +57,7 @@ npm install
 
 ### 固定小型 worker pool（fork 功能）
 
-需要并行生图时，可改用 `config.pool.example.json` 的结构。Pool 支持 1–3 个固定 worker，建议先使用 2 个。每个 worker 必须配置独立 `chromeUserDataDir` 和独立 `accountSwitchCommand`；重复 profile 或重复 switch command 会在启动时被拒绝。不同 worker 可以并行运行，但每个 worker 内部仍保持单操作串行化，并继续使用原本的 dedicated-profile lease、quota retry、terminal-reply、cleanup、source-image allowlist 与 capture 流程。
+需要并行生图时，可改用 `config.pool.example.json` 的结构。Pool 支持 1–3 个固定 worker；当前 production 使用 3 个。每个 worker 必须配置独立 `chromeUserDataDir` 和独立 `accountSwitchCommand`；重复 profile 或重复 switch command 会在启动时被拒绝。不同 worker 可以并行运行，但每个 worker 内部仍保持单操作串行化，并继续使用原本的 dedicated-profile lease、quota retry、terminal-reply、cleanup、source-image allowlist 与 capture 流程。
 
 ```json
 {
@@ -71,6 +71,11 @@ npm install
       "id": "worker-b",
       "chromeUserDataDir": "D:\\path\\to\\chrome-profile-b",
       "accountSwitchCommand": "D:\\path\\to\\switch-worker-b.cmd"
+    },
+    {
+      "id": "worker-c",
+      "chromeUserDataDir": "D:\\path\\to\\chrome-profile-c",
+      "accountSwitchCommand": "D:\\path\\to\\switch-worker-c.cmd"
     }
   ]
 }
@@ -78,14 +83,24 @@ npm install
 
 Generation calls are assigned to an idle worker only for the duration of that job. The worker browser session is closed after the job finishes so its profile lease returns to the shared pool for other MCP processes. The scheduler does not permanently bind a ChatGPT conversation to a worker. When all workers remain busy for `CHATGPT_BROWSER_POOL_WAIT_MS` (default 15000 ms), the call fails with `BROWSER_POOL_BUSY`; it does not enter an unbounded FIFO queue. While scanning candidates, each worker profile acquisition uses `CHATGPT_BROWSER_POOL_WORKER_LEASE_TIMEOUT_MS` (default 1000 ms) so one externally busy profile does not consume the whole pool wait.
 
+Executor's local stdio MCP transport is per-call, so an in-memory round-robin
+cursor would reset to worker A for every sequential production invocation. Pool
+mode therefore reserves the next starting worker through the machine-local
+`~/.chatgpt-web-image-mcp/worker-pool-cursor.json` state under a short atomic
+cross-process lock. With A/B/C idle, sequential calls start A → B → C → A. Three
+concurrent callers also reserve distinct starting workers before profile-lease
+fallback is considered. The cursor file contains only worker IDs and the next
+index; it contains no account, browser-session, cookie, token, or profile data.
+
 Multi-worker generation fails closed with `POOL_AFFINITY_REQUIRED` for account-scoped ChatGPT URLs such as `/c/...` conversations and project URLs. Portable root-chat and Images surface jobs can be scheduled on any worker. This intentionally avoids inventing a permanent conversation-to-profile binding; short-lived affinity remains a separate follow-up only if production evidence proves it necessary.
 
-Pool mode intentionally does not support CDP because each worker must own a distinct dedicated profile. Account sets behind the switch commands must also be disjoint (for example A1/A2 vs B1/B2); this repository validates that workers do not reuse the same switch command but does not inspect browser/session secrets to prove account-ring membership.
+Pool mode intentionally does not support CDP because each worker must own a distinct dedicated profile. Account sets behind the switch commands must also be disjoint (for example A-ring vs B-ring vs C-ring); this repository validates that workers do not reuse the same switch command but does not inspect browser/session secrets to prove account-ring membership.
 
 For the production account-rotation companion, point each worker at its explicit
-`chatgpt-account-switcher/switch-worker-a.*` or `switch-worker-b.*` wrapper.
-Those wrappers own the dynamic A/B account-ring split and their independent
-`.state-worker-a.json` / `.state-worker-b.json` cursors. Do not embed fixed
+`chatgpt-account-switcher/switch-worker-a.*`, `switch-worker-b.*`, or
+`switch-worker-c.*` wrapper. Those wrappers own the dynamic A/B/C account-ring
+split and their independent `.state-worker-a.json` / `.state-worker-b.json` /
+`.state-worker-c.json` cursors. Do not embed fixed
 numeric account ranges in this Image MCP config and do not use the removed
 legacy `.state.json` generic rotation path.
 
@@ -94,8 +109,10 @@ Login and per-worker diagnostics are explicit:
 ```bash
 node bin/chatgpt-web-image.js login --worker worker-a
 node bin/chatgpt-web-image.js login --worker worker-b
+node bin/chatgpt-web-image.js login --worker worker-c
 node bin/chatgpt-web-image.js check --worker worker-a
 node bin/chatgpt-web-image.js check --worker worker-b
+node bin/chatgpt-web-image.js check --worker worker-c
 ```
 
 `setup-project` also requires `--worker` in multi-worker mode. `generate --worker` is rejected because ordinary generation must remain scheduler-assigned rather than caller-pinned.

@@ -9,6 +9,11 @@
       "id": "worker-b",
       "chromeUserDataDir": "D:\\path\\to\\dedicated-chrome-profile-b",
       "accountSwitchCommand": "D:\\path\\to\\switch-worker-b.cmd"
+    },
+    {
+      "id": "worker-c",
+      "chromeUserDataDir": "D:\\path\\to\\dedicated-chrome-profile-c",
+      "accountSwitchCommand": "D:\\path\\to\\switch-worker-c.cmd"
     }
   ]
 }

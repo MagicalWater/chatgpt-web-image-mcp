@@ -250,6 +250,12 @@ export function loadConfig(env = process.env, options = {}) {
       15000,
       "CHATGPT_BROWSER_POOL_WORKER_LEASE_TIMEOUT_MS",
     ),
+    poolCursorFile: path.resolve(
+      expandHome(
+        env.CHATGPT_BROWSER_POOL_CURSOR_FILE || path.join(root, "worker-pool-cursor.json"),
+        homeDir,
+      ),
+    ),
     outputDir: path.resolve(
       expandHome(env.CHATGPT_IMAGE_OUTPUT_DIR || path.join(root, "outputs"), homeDir),
     ),

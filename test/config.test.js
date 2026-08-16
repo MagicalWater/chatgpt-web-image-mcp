@@ -82,13 +82,22 @@ test("loads an isolated fixed worker pool", () => {
           chromeUserDataDir: "/tmp/profile-b",
           accountSwitchCommand: "/tmp/switch-b.command",
         },
+        {
+          id: "worker-c",
+          chromeUserDataDir: "/tmp/profile-c",
+          accountSwitchCommand: "/tmp/switch-c.command",
+        },
       ],
     },
   });
   assert.equal(config.chromeUserDataDir, "");
   assert.equal(config.poolWaitMs, 15000);
   assert.equal(config.poolWorkerLeaseTimeoutMs, 1000);
-  assert.deepEqual(config.workers.map((worker) => worker.id), ["worker-a", "worker-b"]);
+  assert.equal(
+    config.poolCursorFile,
+    path.resolve("/tmp/operator/.chatgpt-web-image-mcp/worker-pool-cursor.json"),
+  );
+  assert.deepEqual(config.workers.map((worker) => worker.id), ["worker-a", "worker-b", "worker-c"]);
 });
 
 test("worker pool rejects shared profiles and account switch commands", () => {

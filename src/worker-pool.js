@@ -1,6 +1,7 @@
 import { UserFacingError } from "./errors.js";
 import { ImageGenerator } from "./generator.js";
 import { resolveSurfaceTarget } from "./surface-config.js";
+import { claimWorkerStart } from "./worker-pool-cursor.js";
 
 const DEFAULT_POLL_MS = 250;
 
@@ -14,6 +15,7 @@ export class ImageWorkerPool {
     this.now = dependencies.now ?? Date.now;
     this.sleep = dependencies.sleep ?? sleep;
     this.pollMs = dependencies.pollMs ?? DEFAULT_POLL_MS;
+    this.claimWorkerStart = dependencies.claimWorkerStart ?? claimWorkerStart;
     const createGenerator = dependencies.createGenerator
       ?? ((workerConfig) => new ImageGenerator(workerConfig));
     this.workers = config.workers.map((worker) => ({
@@ -27,22 +29,14 @@ export class ImageWorkerPool {
         profileLeaseTimeoutMs: config.poolWorkerLeaseTimeoutMs,
       }),
     }));
-    this.cursor = 0;
   }
 
-  orderedWorkers() {
+  orderedWorkers(startIndex = 0) {
     const ordered = [];
     for (let offset = 0; offset < this.workers.length; offset += 1) {
-      ordered.push(this.workers[(this.cursor + offset) % this.workers.length]);
+      ordered.push(this.workers[(startIndex + offset) % this.workers.length]);
     }
     return ordered;
-  }
-
-  advanceCursor(worker) {
-    const index = this.workers.indexOf(worker);
-    if (index >= 0) {
-      this.cursor = (index + 1) % this.workers.length;
-    }
   }
 
   async runOnWorker(worker, operation) {
@@ -57,12 +51,18 @@ export class ImageWorkerPool {
 
   async schedule(operation) {
     const startedAt = this.now();
+    const startIndex = await this.claimWorkerStart(
+      this.config.poolCursorFile,
+      this.workers.map((worker) => worker.id),
+    );
     while (true) {
-      for (const worker of this.orderedWorkers()) {
+      for (const worker of this.orderedWorkers(startIndex)) {
         if (worker.busy) continue;
         try {
-          const result = await this.runOnWorker(worker, operation);
-          this.advanceCursor(worker);
+          const result = await this.runOnWorker(
+            worker,
+            (generator) => operation(generator, worker),
+          );
           return result;
         } catch (error) {
           if (error?.code !== "BROWSER_PROFILE_BUSY" && error?.code !== "BROWSER_CLOSE_TIMEOUT") {
@@ -114,7 +114,10 @@ export class ImageWorkerPool {
       const result = await this.runOnWorker(worker, (generator) => generator.check(checkInput));
       return { ...result, worker: worker.id };
     }
-    return this.schedule((generator) => generator.check(input));
+    return this.schedule(async (generator, worker) => ({
+      ...(await generator.check(input)),
+      worker: worker.id,
+    }));
   }
 
   async setupProject(input = {}) {
