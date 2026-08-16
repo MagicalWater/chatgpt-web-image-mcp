@@ -65,7 +65,7 @@ export class ImageWorkerPool {
           this.advanceCursor(worker);
           return result;
         } catch (error) {
-          if (error?.code !== "BROWSER_PROFILE_BUSY") {
+          if (error?.code !== "BROWSER_PROFILE_BUSY" && error?.code !== "BROWSER_CLOSE_TIMEOUT") {
             throw error;
           }
         }

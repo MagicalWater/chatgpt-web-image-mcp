@@ -69,6 +69,27 @@ test("a profile-busy worker is skipped in favor of the next worker", async () =>
   assert.deepEqual(attempts, ["/tmp/a", "/tmp/b"]);
 });
 
+test("a cleanup-blocked worker is skipped in favor of the next worker", async () => {
+  const attempts = [];
+  const pool = new ImageWorkerPool(poolConfig(), {
+    createGenerator(config) {
+      return {
+        async generate() {
+          attempts.push(config.chromeUserDataDir);
+          if (config.chromeUserDataDir === "/tmp/a") {
+            throw new UserFacingError("cleanup blocked", "BROWSER_CLOSE_TIMEOUT");
+          }
+          return { ok: true, profile: config.chromeUserDataDir };
+        },
+        async close() {},
+      };
+    },
+  });
+  const result = await pool.generate({ prompt: "test" });
+  assert.equal(result.profile, "/tmp/b");
+  assert.deepEqual(attempts, ["/tmp/a", "/tmp/b"]);
+});
+
 test("pool saturation returns BROWSER_POOL_BUSY after the bounded wait", async () => {
   let now = 0;
   const pool = new ImageWorkerPool(poolConfig({ poolWaitMs: 20 }), {

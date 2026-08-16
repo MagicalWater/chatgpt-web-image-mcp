@@ -3,7 +3,27 @@ import fs from "node:fs/promises";
 import { chromium } from "playwright-core";
 
 import { acquireBrowserProfileLease } from "./browser-profile-lease.js";
+import { isDedicatedChromeProfileRunning } from "./browser-process.js";
 import { UserFacingError } from "./errors.js";
+
+const DEFAULT_BROWSER_CLOSE_TIMEOUT_MS = 5000;
+
+async function settleWithin(promise, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise.then(
+        () => "settled",
+        () => "settled",
+      ),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function isAllowedChatGPTUrl(value) {
   try {
@@ -40,13 +60,19 @@ export class BrowserSession {
     this.context = null;
     this.ownsContext = false;
     this.profileLease = null;
+    this.cleanupBlocked = false;
     this.acquireProfileLease = dependencies.acquireProfileLease ?? acquireBrowserProfileLease;
+    this.isDedicatedChromeProfileRunning = dependencies.isDedicatedChromeProfileRunning
+      ?? isDedicatedChromeProfileRunning;
     this.connectOverCDP = dependencies.connectOverCDP ?? ((url) => chromium.connectOverCDP(url));
     this.launchPersistentContext = dependencies.launchPersistentContext
       ?? ((userDataDir, options) => chromium.launchPersistentContext(userDataDir, options));
   }
 
   async getContext() {
+    if (this.cleanupBlocked) {
+      await this.close();
+    }
     if (this.context) {
       return this.context;
     }
@@ -117,8 +143,50 @@ export class BrowserSession {
   }
 
   async close() {
+    if (this.cleanupBlocked) {
+      let stillRunning = true;
+      try {
+        stillRunning = await this.isDedicatedChromeProfileRunning(this.config.chromeUserDataDir);
+      } catch {
+        stillRunning = true;
+      }
+      if (stillRunning) {
+        throw new UserFacingError(
+          "The dedicated Chrome process did not exit within the browser cleanup deadline.",
+          "BROWSER_CLOSE_TIMEOUT",
+        );
+      }
+      if (this.profileLease) {
+        await this.profileLease.release().catch(() => {});
+      }
+      this.context = null;
+      this.browser = null;
+      this.ownsContext = false;
+      this.profileLease = null;
+      this.cleanupBlocked = false;
+      return;
+    }
+
     if (this.ownsContext && this.context) {
-      await this.context.close().catch(() => {});
+      const closeState = await settleWithin(
+        this.context.close(),
+        this.config.browserCloseTimeoutMs ?? DEFAULT_BROWSER_CLOSE_TIMEOUT_MS,
+      );
+      if (closeState === "timeout") {
+        let stillRunning = true;
+        try {
+          stillRunning = await this.isDedicatedChromeProfileRunning(this.config.chromeUserDataDir);
+        } catch {
+          stillRunning = true;
+        }
+        if (stillRunning) {
+          this.cleanupBlocked = true;
+          throw new UserFacingError(
+            "The dedicated Chrome process did not exit within the browser cleanup deadline.",
+            "BROWSER_CLOSE_TIMEOUT",
+          );
+        }
+      }
     }
     if (this.profileLease) {
       await this.profileLease.release().catch(() => {});
@@ -129,5 +197,6 @@ export class BrowserSession {
     this.browser = null;
     this.ownsContext = false;
     this.profileLease = null;
+    this.cleanupBlocked = false;
   }
 }

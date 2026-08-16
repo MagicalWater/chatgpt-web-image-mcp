@@ -3,6 +3,15 @@ import test from "node:test";
 
 import { BrowserSession } from "../src/browser-session.js";
 
+function rejectIfSlow(promise, timeoutMs = 50) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("browser close did not complete within the test deadline")), timeoutMs);
+    }),
+  ]);
+}
+
 function makeSession(initialUrl, finalUrl) {
   let currentUrl = initialUrl;
   const page = {
@@ -81,6 +90,64 @@ test("persistent browser context holds lease until normal close", async () => {
   await session.close();
   assert.equal(closed, 1);
   assert.equal(released, 1);
+});
+
+test("persistent browser close is bounded and releases the lease after Chrome has exited", async () => {
+  let released = 0;
+  let profileChecks = 0;
+  const session = new BrowserSession(
+    {
+      chromeUserDataDir: "/tmp/profile",
+      chromeChannel: "chrome",
+      headless: false,
+      browserCloseTimeoutMs: 1,
+    },
+    {
+      acquireProfileLease: async () => ({ release: async () => { released += 1; } }),
+      launchPersistentContext: async () => ({
+        async close() {
+          await new Promise(() => {});
+        },
+      }),
+      isDedicatedChromeProfileRunning: async () => {
+        profileChecks += 1;
+        return false;
+      },
+    },
+  );
+
+  await session.getContext();
+  await rejectIfSlow(session.close());
+  assert.equal(profileChecks, 1);
+  assert.equal(released, 1);
+});
+
+test("persistent browser close keeps the lease when Chrome is still running after timeout", async () => {
+  let released = 0;
+  const session = new BrowserSession(
+    {
+      chromeUserDataDir: "/tmp/profile",
+      chromeChannel: "chrome",
+      headless: false,
+      browserCloseTimeoutMs: 1,
+    },
+    {
+      acquireProfileLease: async () => ({ release: async () => { released += 1; } }),
+      launchPersistentContext: async () => ({
+        async close() {
+          await new Promise(() => {});
+        },
+      }),
+      isDedicatedChromeProfileRunning: async () => true,
+    },
+  );
+
+  await session.getContext();
+  await assert.rejects(
+    rejectIfSlow(session.close()),
+    (error) => error?.code === "BROWSER_CLOSE_TIMEOUT",
+  );
+  assert.equal(released, 0);
 });
 
 test("persistent browser acquisition uses the bounded profile lease timeout instead of generation timeout", async () => {
