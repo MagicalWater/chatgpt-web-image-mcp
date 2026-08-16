@@ -82,6 +82,13 @@ Multi-worker generation fails closed with `POOL_AFFINITY_REQUIRED` for account-s
 
 Pool mode intentionally does not support CDP because each worker must own a distinct dedicated profile. Account sets behind the switch commands must also be disjoint (for example A1/A2 vs B1/B2); this repository validates that workers do not reuse the same switch command but does not inspect browser/session secrets to prove account-ring membership.
 
+For the production account-rotation companion, point each worker at its explicit
+`chatgpt-account-switcher/switch-worker-a.*` or `switch-worker-b.*` wrapper.
+Those wrappers own the dynamic A/B account-ring split and their independent
+`.state-worker-a.json` / `.state-worker-b.json` cursors. Do not embed fixed
+numeric account ranges in this Image MCP config and do not use the removed
+legacy `.state.json` generic rotation path.
+
 Login and per-worker diagnostics are explicit:
 
 ```bash
