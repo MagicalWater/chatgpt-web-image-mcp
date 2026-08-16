@@ -22,3 +22,15 @@ test("macOS dedicated-profile detection ignores non-Chrome commands containing t
     true,
   );
 });
+
+test("Windows dedicated-profile detection resolves Windows paths independent of the test host", () => {
+  const profile = "D:\\Developer\\chatgpt-web-image-mcp-admission\\chrome-profile-cdp";
+  assert.equal(
+    processLineUsesDedicatedChromeProfile(
+      `456 chrome.exe --user-data-dir=${profile} about:blank`,
+      profile,
+      "win32",
+    ),
+    true,
+  );
+});

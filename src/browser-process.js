@@ -9,7 +9,11 @@ function normalized(value) {
 }
 
 export function processLineUsesDedicatedChromeProfile(line, profilePath, platform = process.platform) {
-  const resolvedProfile = path.resolve(profilePath);
+  const resolvedProfile = platform === "darwin"
+    ? path.posix.resolve(profilePath)
+    : platform === "win32"
+      ? path.win32.resolve(profilePath)
+      : path.resolve(profilePath);
   const normalizedLine = normalized(line);
   const userDataMarker = normalized(`--user-data-dir=${resolvedProfile}`);
   if (!normalizedLine.includes(userDataMarker)) {
