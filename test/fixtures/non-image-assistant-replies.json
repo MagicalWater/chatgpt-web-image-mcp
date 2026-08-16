@@ -1,0 +1,20 @@
+{
+  "inputRequired": [
+    "Please upload the source images you want used as references. Once they’re attached, I can generate the requested composition.",
+    "Please attach the source images first. I won’t proceed with the image generation/editing until the source images are actually attached to this request.",
+    "請先把那張目前的架構圖重新上傳（或直接貼到這個對話中）。我需要以該圖片作為編輯目標，才能只做指定的局部修正。請直接上傳目前那一版圖片即可。",
+    "请先重新上传当前那张架构图。我需要把该图片作为编辑目标，才能只修改你指定的局部内容。"
+  ],
+  "generationUnavailable": [
+    "由於你要求的是重新生成一張圖片（而不是調整提示文字），我需要直接使用圖片生成功能。但目前這個對話執行環境無法呼叫圖片產生工具，因此我沒辦法直接輸出新的架構海報。",
+    "当前这个对话环境无法调用图片生成工具，所以我没办法直接输出新的架构海报。",
+    "Image generation tools are not available in this conversation, so I can't directly generate the requested architecture poster."
+  ],
+  "nonTerminal": [
+    "Understood. I’ll use the attached source images as strict references and proceed with the requested generation.",
+    "The source images are not available in this conversation, but I can proceed without them.",
+    "參考圖片沒有問題，可以繼續進行生成。",
+    "The preferred image generation tool is unavailable, but I can still generate the image with the available fallback.",
+    "目前的架構圖已經上傳完成，我可以直接以它為編輯目標繼續修改。"
+  ]
+}

@@ -345,7 +345,7 @@ Windows / macOS 可选账号切换配置同样位于仓库根目录的本地 `co
 
 如果生成过程中 ChatGPT 才显示“太多要求 / Too many requests”，工具会自动按下确认按钮并继续等待同一次生成结果，不会仅因为这个可关闭对话框就让当前生成失败。
 
-如果 ChatGPT 明确返回了一则文字回复，表明本次图片生成并未开始（例如要求先补传必要的 source image，或明确声称当前对话环境无法调用图片生成工具/功能、因此不能直接生成或输出图片），当前 fork 会将其视为 terminal generation failure，而不是继续等待到图片生成超时。缺少必要输入返回 `IMAGE_GENERATION_INPUT_REQUIRED`；当前对话图片生成能力明确不可用时返回 `IMAGE_GENERATION_UNAVAILABLE`。此类错误对 MCP 调用者只返回与失败直接相关的、经过清洗且有长度上限的可见 assistant 回复或片段；不会返回整页 DOM、完整会话历史、浏览器状态、Cookie、token、环境变量、profile 内容或 stack trace。
+如果 ChatGPT 明确返回了一则文字回复，表明本次图片生成并未开始（例如要求先补传必要图片/素材，或明确声称当前对话环境无法调用图片生成工具/功能、因此不能直接生成或输出图片），当前 fork 会将其视为 terminal generation failure，而不是继续等待到图片生成超时。缺少必要输入返回 `IMAGE_GENERATION_INPUT_REQUIRED`；当前对话图片生成能力明确不可用时返回 `IMAGE_GENERATION_UNAVAILABLE`。Classifier 按少数稳定语意 family 判定，而不是维护不断增长的整句黑名单；实际遇到的 wording 作为 regression corpus 保存在 `test/fixtures/non-image-assistant-replies.json`，用于持续扩大覆盖而不让 production 规则失控。此类错误对 MCP 调用者只返回与失败直接相关的、经过清洗且有长度上限的可见 assistant 回复或片段；不会返回整页 DOM、完整会话历史、浏览器状态、Cookie、token、环境变量、profile 内容或 stack trace。
 
 对于 MCP 自己启动的 dedicated Chrome profile，terminal generation failure（包括结果超时）会在错误返回前关闭 MCP-owned persistent context 并释放 profile lease，避免后续独立 MCP process 因 profile lease 仍被占用而阻塞；该行为已通过 Windows production acceptance。CDP 模式连接的是操作者拥有的浏览器，生成失败时不会主动关闭操作者的 Chrome；本轮 production acceptance 不把 CDP transport 主动断连声明为已验证行为。
 

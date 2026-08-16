@@ -139,24 +139,30 @@ export function sanitizeAssistantDiagnostic(value, maxChars = MAX_ASSISTANT_DIAG
 export function classifyNonImageAssistantReply(value) {
   const assistantReply = sanitizeAssistantDiagnostic(value);
   const lower = assistantReply.toLowerCase();
-  const englishSourceMention = /(?:source|reference) images?/.test(lower);
-  const englishAttachmentMention =
-    /(?:attach(?:ed|ment)?|upload(?:ed)?|accessible|available|provided|missing|absent)/.test(lower);
-  const englishBlockedForInput =
-    /(?:will not|won['’]t|cannot|can['’]t|unable to|do not|don['’]t) (?:proceed|continue)/.test(lower);
-  const chineseSourceMention = /(?:來源|来源|參考|参考)圖片/.test(assistantReply);
-  const chineseAttachmentMention =
-    /(?:上傳|上传|附加|附件|提供|存取|访问|可用|缺少|未附|沒有附|没有附)/.test(assistantReply);
-  const chineseBlockedForInput =
-    /(?:不會|不会|不能|無法|无法)[^。！？]{0,30}(?:繼續|继续|進行|进行)/.test(assistantReply);
-  const sourceRequired =
-    /please (?:first )?(?:upload|attach) (?:the )?source images?(?: first)?/.test(lower) ||
-    /upload (?:the )?source images? you want used as references?/.test(lower) ||
-    (englishSourceMention && englishAttachmentMention && englishBlockedForInput) ||
-    (chineseSourceMention && chineseAttachmentMention && chineseBlockedForInput) ||
-    /請(?:先)?(?:上傳|附加|提供)[^。！？.!?]{0,80}(?:來源|參考)?圖片/.test(assistantReply) ||
-    /请(?:先)?(?:上传|附加|提供)[^。！？.!?]{0,80}(?:来源|参考)?图片/.test(assistantReply);
-  if (sourceRequired) {
+  const englishImageInputMention =
+    /(?:source|reference|current|existing|original|target)?\s*(?:image|picture|diagram|poster|artwork|visual|asset)s?/.test(lower);
+  const englishInputAction =
+    /(?:re-?upload|upload|attach|provide|send|add)/.test(lower);
+  const englishInputRequired =
+    /(?:please|need(?:ed)?|require(?:d)?|must|first|before|as (?:the )?(?:editing|edit) target)/.test(lower) ||
+    /(?:will not|won['’]t|cannot|can['’]t|unable to|do not|don['’]t)[^.!?]{0,60}(?:proceed|continue|generate|edit)/.test(lower);
+  const englishPositiveInputFallback =
+    /(?:already|currently) (?:attached|uploaded|available)[^.!?]{0,50}(?:and|so|,)[^.!?]{0,50}(?:proceed|continue|generate|edit)/.test(lower);
+
+  const chineseImageInputMention =
+    /(?:圖片|图片|圖像|图像|架構圖|架构图|海報|海报|素材|原圖|原图)/.test(assistantReply);
+  const chineseInputAction =
+    /(?:重新)?(?:上傳|上传)|附加|提供|傳送|传送|發送|发送|貼上|贴上/.test(assistantReply);
+  const chineseInputRequired =
+    /(?:請|请|需要|必須|必须|先|才能|否則|否则|作為[^。！？]{0,24}(?:編輯|编辑)目標|作为[^。！？]{0,24}(?:编辑|編輯)目标)/.test(assistantReply) ||
+    /(?:不會|不会|不能|無法|无法|沒辦法|没办法)[^。！？]{0,60}(?:繼續|继续|進行|进行|生成|產生|产生|編輯|编辑)/.test(assistantReply);
+  const chinesePositiveInputFallback =
+    /(?:已經|已经|目前|當前|当前)[^。！？]{0,30}(?:上傳|上传|附加|可用)[^。！？]{0,50}(?:可以|可|會|会)[^。！？]{0,30}(?:繼續|继续|生成|產生|产生|編輯|编辑)/.test(assistantReply);
+
+  const inputRequired =
+    (englishImageInputMention && englishInputAction && englishInputRequired && !englishPositiveInputFallback) ||
+    (chineseImageInputMention && chineseInputAction && chineseInputRequired && !chinesePositiveInputFallback);
+  if (inputRequired) {
     return {
       terminal: true,
       code: "IMAGE_GENERATION_INPUT_REQUIRED",

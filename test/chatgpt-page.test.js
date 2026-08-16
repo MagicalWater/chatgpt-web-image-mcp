@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import * as chatgptPageModule from "../src/chatgpt-page.js";
@@ -18,6 +19,11 @@ import {
 } from "../src/chatgpt-page.js";
 import { safeError, UserFacingError } from "../src/errors.js";
 import { IMAGES_SURFACE_SELECTORS } from "../src/images-page.js";
+
+const nonImageReplyCorpus = JSON.parse(fs.readFileSync(
+  new URL("./fixtures/non-image-assistant-replies.json", import.meta.url),
+  "utf8",
+));
 
 function fakePage({ guestStates = [false] } = {}) {
   let guestIndex = 0;
@@ -318,6 +324,23 @@ test("non-image assistant classifier does not reject an unavailable tool when th
     "The preferred image generation tool is unavailable, but I can still generate the image with the available fallback.",
   );
   assert.equal(result.terminal, false);
+});
+
+test("non-image assistant classifier corpus stays aligned with semantic families", () => {
+  for (const reply of nonImageReplyCorpus.inputRequired) {
+    const result = classifyNonImageAssistantReply(reply);
+    assert.equal(result.terminal, true, reply);
+    assert.equal(result.code, "IMAGE_GENERATION_INPUT_REQUIRED", reply);
+  }
+  for (const reply of nonImageReplyCorpus.generationUnavailable) {
+    const result = classifyNonImageAssistantReply(reply);
+    assert.equal(result.terminal, true, reply);
+    assert.equal(result.code, "IMAGE_GENERATION_UNAVAILABLE", reply);
+  }
+  for (const reply of nonImageReplyCorpus.nonTerminal) {
+    const result = classifyNonImageAssistantReply(reply);
+    assert.equal(result.terminal, false, reply);
+  }
 });
 
 test("assistant diagnostic is bounded and strips control characters", () => {
