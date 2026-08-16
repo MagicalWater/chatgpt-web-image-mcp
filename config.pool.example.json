@@ -1,0 +1,14 @@
+{
+  "workers": [
+    {
+      "id": "worker-a",
+      "chromeUserDataDir": "D:\\path\\to\\dedicated-chrome-profile-a",
+      "accountSwitchCommand": "D:\\path\\to\\switch-worker-a.cmd"
+    },
+    {
+      "id": "worker-b",
+      "chromeUserDataDir": "D:\\path\\to\\dedicated-chrome-profile-b",
+      "accountSwitchCommand": "D:\\path\\to\\switch-worker-b.cmd"
+    }
+  ]
+}

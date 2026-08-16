@@ -8,8 +8,10 @@ config.json
 *.tgz
 coverage/
 chatgpt-web-image-mcp-*.zip
+.runtime/
 
 # A browser profile contains login cookies and must never be committed.
 chrome-profile/
 chrome-profile-cdp/
+chrome-profile-*/
 .chatgpt-web-image-mcp/

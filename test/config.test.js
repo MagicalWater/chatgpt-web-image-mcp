@@ -67,6 +67,70 @@ test("loads the optional account switch command from runtime config", () => {
   assert.equal(config.accountSwitchCommand, "C:\\tools\\switch.cmd");
 });
 
+test("loads an isolated fixed worker pool", () => {
+  const config = loadConfig({}, {
+    homeDir: "/tmp/operator",
+    runtimeConfig: {
+      workers: [
+        {
+          id: "worker-a",
+          chromeUserDataDir: "/tmp/profile-a",
+          accountSwitchCommand: "/tmp/switch-a.command",
+        },
+        {
+          id: "worker-b",
+          chromeUserDataDir: "/tmp/profile-b",
+          accountSwitchCommand: "/tmp/switch-b.command",
+        },
+      ],
+    },
+  });
+  assert.equal(config.chromeUserDataDir, "");
+  assert.equal(config.poolWaitMs, 15000);
+  assert.equal(config.poolWorkerLeaseTimeoutMs, 1000);
+  assert.deepEqual(config.workers.map((worker) => worker.id), ["worker-a", "worker-b"]);
+});
+
+test("worker pool rejects shared profiles and account switch commands", () => {
+  const sharedProfile = {
+    workers: [
+      { id: "a", chromeUserDataDir: "/tmp/shared", accountSwitchCommand: "/tmp/a.command" },
+      { id: "b", chromeUserDataDir: "/tmp/shared", accountSwitchCommand: "/tmp/b.command" },
+    ],
+  };
+  assert.throws(
+    () => loadConfig({}, { homeDir: "/tmp/operator", runtimeConfig: sharedProfile }),
+    /must not share a Chrome profile/,
+  );
+  const sharedCommand = {
+    workers: [
+      { id: "a", chromeUserDataDir: "/tmp/a", accountSwitchCommand: "/tmp/shared.command" },
+      { id: "b", chromeUserDataDir: "/tmp/b", accountSwitchCommand: "/tmp/shared.command" },
+    ],
+  };
+  assert.throws(
+    () => loadConfig({}, { homeDir: "/tmp/operator", runtimeConfig: sharedCommand }),
+    /must not share an account switch command/,
+  );
+});
+
+test("worker pool rejects CDP mode", () => {
+  assert.throws(
+    () => loadConfig(
+      { CHATGPT_CDP_URL: "http://127.0.0.1:9222" },
+      {
+        homeDir: "/tmp/operator",
+        runtimeConfig: {
+          workers: [
+            { id: "a", chromeUserDataDir: "/tmp/a", accountSwitchCommand: "/tmp/a.command" },
+          ],
+        },
+      },
+    ),
+    /does not support CDP/,
+  );
+});
+
 test("selects the dedicated Images URL from configuration", () => {
   const config = loadConfig({ CHATGPT_WEB_SURFACE: "images" }, configOptions());
   assert.equal(config.surface, "images");

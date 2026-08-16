@@ -9,9 +9,12 @@ import { loadConfig } from "./config.js";
 import { safeError } from "./errors.js";
 import { ImageGenerator } from "./generator.js";
 import { toMcpContent } from "./mcp-result.js";
+import { ImageWorkerPool } from "./worker-pool.js";
 
 export function createServer(config = loadConfig(), dependencies = {}) {
-  const generator = dependencies.generator || new ImageGenerator(config);
+  const generator = dependencies.generator || (config.workers?.length
+    ? new ImageWorkerPool(config)
+    : new ImageGenerator(config));
   const reportToolError =
     dependencies.reportToolError ||
     ((tool, safe) => {
@@ -33,6 +36,7 @@ export function createServer(config = loadConfig(), dependencies = {}) {
           .url()
           .optional()
           .describe("Optional HTTPS chatgpt.com URL override"),
+        worker: z.string().min(1).max(64).optional().describe("Optional configured worker id for diagnostics"),
       },
     },
     async (input) => {
@@ -74,6 +78,7 @@ export function createServer(config = loadConfig(), dependencies = {}) {
           .boolean()
           .optional()
           .describe("Create another project instead of reusing the configured URL"),
+        worker: z.string().min(1).max(64).optional().describe("Required in multi-worker pool mode"),
       },
     },
     async (input) => {
@@ -93,7 +98,7 @@ export function createServer(config = loadConfig(), dependencies = {}) {
     {
       title: "Generate image in ChatGPT web",
       description:
-        "Use the operator's dedicated, logged-in local ChatGPT web session to generate an image and return the captured image content. Calls are serialized.",
+        "Use an available dedicated, logged-in local ChatGPT web worker to generate an image and return the captured image content. Operations stay serialized within each worker while different workers may run concurrently.",
       inputSchema: {
         prompt: z.string().min(1).max(12000).describe("Image generation or editing prompt"),
         source_images: z

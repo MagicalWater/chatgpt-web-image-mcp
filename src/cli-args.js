@@ -16,6 +16,7 @@ export function parseCliArgs(argv) {
     style_profile: undefined,
     surface: "",
     use_consistency: undefined,
+    worker: "",
   };
   for (let index = 1; index < argv.length; index += 1) {
     const key = argv[index];
@@ -69,11 +70,23 @@ export function parseCliArgs(argv) {
       index += 1;
     } else if (key === "--force-new") {
       result.force_new = true;
+    } else if (key === "--worker") {
+      if (!value) {
+        throw new UserFacingError("--worker requires a configured worker id", "INVALID_ARGUMENT");
+      }
+      result.worker = value;
+      index += 1;
     } else if (["--help", "-h"].includes(key)) {
       result.command = "help";
     } else {
       throw new UserFacingError(`Unknown argument: ${key}`, "INVALID_ARGUMENT");
     }
+  }
+  if (result.command === "generate" && result.worker) {
+    throw new UserFacingError(
+      "--worker is not supported for generate; pool mode assigns generation jobs temporarily.",
+      "INVALID_ARGUMENT",
+    );
   }
   return result;
 }

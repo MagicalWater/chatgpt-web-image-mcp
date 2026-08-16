@@ -3,7 +3,10 @@
 This tool controls a signed-in browser and therefore has the same practical access as the operator at that browser window.
 
 - Use a dedicated Chrome profile. Never point it at your normal browsing profile.
+- In worker-pool mode, every worker must use a different dedicated Chrome profile and a different account-switch command. Never share one profile between workers or copy profile contents to create another worker.
 - Never commit or share the profile directory. It contains session credentials.
+- Keep worker account rings disjoint operationally. The MCP intentionally does not inspect cookies, tokens, or account-switcher secret state to infer account membership.
+- Account-scoped conversation/project URLs are rejected in pool generation until an explicit affinity design is reviewed; they are never silently routed to a different account.
 - Keep the MCP transport local (`stdio`). Do not expose it as an unauthenticated remote service.
 - Local source-image upload is disabled until `CHATGPT_IMAGE_ALLOWED_INPUT_DIRS` is configured. Use the narrowest possible roots.
 - CDP is limited to loopback by default. Remote CDP exposes browser control and should be used only on a trusted private network with independent access controls.

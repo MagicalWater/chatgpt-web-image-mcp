@@ -7,6 +7,7 @@ import { safeError, UserFacingError } from "../src/errors.js";
 import { ImageGenerator } from "../src/generator.js";
 import { launchNativeChromeForLogin } from "../src/native-login.js";
 import { resolveSurfaceTarget } from "../src/surface-config.js";
+import { ImageWorkerPool } from "../src/worker-pool.js";
 
 const HELP = `chatgpt-web-image
 
@@ -31,6 +32,7 @@ Options:
       --project-url URL   Adopt and configure an existing ChatGPT project URL
       --force-new         Create a new project even when a fixed URL is already configured
       --output-dir PATH   Override the output directory for this CLI run
+      --worker ID         Select a configured worker for login/check/setup-project
   -h, --help              Show this help
 `;
 
@@ -43,12 +45,22 @@ async function runLogin(generator, config, args) {
   process.stderr.write(
     "Opening a native Chrome window with the dedicated profile. Sign in to ChatGPT, then close that dedicated Chrome window to continue verification.\n",
   );
+  let workerConfig;
+  if (config.workers?.length) {
+    if (!args.worker) {
+      throw new UserFacingError("Pool mode login requires --worker", "WORKER_REQUIRED");
+    }
+    workerConfig = config.workers.find((worker) => worker.id === args.worker);
+    if (!workerConfig) {
+      throw new UserFacingError(`Unknown worker: ${args.worker}`, "INVALID_WORKER");
+    }
+  }
   await launchNativeChromeForLogin({
-    chromeUserDataDir: config.chromeUserDataDir,
+    chromeUserDataDir: workerConfig?.chromeUserDataDir || config.chromeUserDataDir,
     chatgptUrl: target.url,
   });
   process.stderr.write("Dedicated Chrome closed. Verifying the persisted ChatGPT session...\n");
-  const status = await generator.check(input);
+  const status = await generator.check({ ...input, worker: args.worker || undefined });
   process.stdout.write(`${JSON.stringify({ ok: true, ...status }, null, 2)}\n`);
 }
 
@@ -63,7 +75,7 @@ async function main() {
     env.CHATGPT_IMAGE_OUTPUT_DIR = path.resolve(args.output_dir);
   }
   const config = loadConfig(env);
-  const generator = new ImageGenerator(config);
+  const generator = config.workers?.length ? new ImageWorkerPool(config) : new ImageGenerator(config);
   try {
     if (args.command === "login") {
       await runLogin(generator, config, args);
@@ -75,6 +87,7 @@ async function main() {
           await generator.check({
             chatgpt_url: args.chatgpt_url || undefined,
             surface: args.surface || undefined,
+            worker: args.worker || undefined,
           }),
           null,
           2,
@@ -87,6 +100,7 @@ async function main() {
         project_name: args.project_name || undefined,
         project_url: args.project_url || undefined,
         force_new: args.force_new,
+        worker: args.worker || undefined,
         ...(args.character_profile !== undefined
           ? { character_profile: args.character_profile }
           : {}),

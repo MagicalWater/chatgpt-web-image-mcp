@@ -29,7 +29,16 @@ test("parses repeated source images", () => {
       style_profile: undefined,
       surface: "images",
       use_consistency: undefined,
+      worker: "",
     },
+  );
+});
+
+test("parses an explicit worker selector", () => {
+  assert.equal(parseCliArgs(["check", "--worker", "worker-b"]).worker, "worker-b");
+  assert.throws(
+    () => parseCliArgs(["generate", "--worker", "worker-a", "--prompt", "draw it"]),
+    /assigns generation jobs temporarily/,
   );
 });
 

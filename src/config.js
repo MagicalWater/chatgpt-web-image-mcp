@@ -129,15 +129,59 @@ function parseAllowedInputDirs(value, homeDir) {
     .map((entry) => path.resolve(expandHome(entry, homeDir)));
 }
 
+function parseWorkers(runtimeConfig, homeDir) {
+  if (runtimeConfig.workers === undefined) return [];
+  if (!Array.isArray(runtimeConfig.workers) || runtimeConfig.workers.length < 1 || runtimeConfig.workers.length > 3) {
+    throw new UserFacingError("config.json workers must contain between 1 and 3 workers", "INVALID_CONFIG");
+  }
+  const ids = new Set();
+  const profiles = new Set();
+  const commands = new Set();
+  return runtimeConfig.workers.map((worker, index) => {
+    if (!worker || typeof worker !== "object" || Array.isArray(worker)) {
+      throw new UserFacingError(`config.json workers[${index}] must be an object`, "INVALID_CONFIG");
+    }
+    const id = String(worker.id || "").trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(id) || ids.has(id)) {
+      throw new UserFacingError("Each worker must have a unique alphanumeric id", "INVALID_CONFIG");
+    }
+    ids.add(id);
+    const profileValue = String(worker.chromeUserDataDir || "").trim();
+    if (!profileValue) {
+      throw new UserFacingError(`Worker ${id} requires chromeUserDataDir`, "INVALID_CONFIG");
+    }
+    const chromeUserDataDir = path.resolve(expandHome(profileValue, homeDir));
+    const profileKey = process.platform === "win32" ? chromeUserDataDir.toLowerCase() : chromeUserDataDir;
+    if (profiles.has(profileKey)) {
+      throw new UserFacingError("Workers must not share a Chrome profile directory", "INVALID_CONFIG");
+    }
+    profiles.add(profileKey);
+    const accountSwitchCommand = String(worker.accountSwitchCommand || "").trim();
+    if (!accountSwitchCommand) {
+      throw new UserFacingError(`Worker ${id} requires accountSwitchCommand`, "INVALID_CONFIG");
+    }
+    const commandKey = process.platform === "win32" ? accountSwitchCommand.toLowerCase() : accountSwitchCommand;
+    if (commands.has(commandKey)) {
+      throw new UserFacingError("Workers must not share an account switch command", "INVALID_CONFIG");
+    }
+    commands.add(commandKey);
+    return { id, chromeUserDataDir, accountSwitchCommand };
+  });
+}
+
 export function loadConfig(env = process.env, options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const runtimeConfig = options.runtimeConfig || readRuntimeConfig(options.configFile);
   const allowRemoteCdp = parseBoolean(env.CHATGPT_ALLOW_REMOTE_CDP, false);
   const cdpUrl = validateCdpUrl(env.CHATGPT_CDP_URL || "", allowRemoteCdp);
+  const workers = parseWorkers(runtimeConfig, homeDir);
+  if (workers.length && cdpUrl) {
+    throw new UserFacingError("Worker pool mode does not support CDP", "INVALID_CONFIG");
+  }
   const chromeUserDataDirValue = String(
     runtimeConfig.chromeUserDataDir || env.CHATGPT_CHROME_USER_DATA_DIR || "",
   ).trim();
-  if (!cdpUrl && !chromeUserDataDirValue) {
+  if (!cdpUrl && !chromeUserDataDirValue && workers.length === 0) {
     throw new UserFacingError(
       "A dedicated Chrome profile must be configured with config.json chromeUserDataDir or CHATGPT_CHROME_USER_DATA_DIR",
       "INVALID_CONFIG",
@@ -192,6 +236,20 @@ export function loadConfig(env = process.env, options = {}) {
       120000,
       "CHATGPT_BROWSER_PROFILE_LEASE_TIMEOUT_MS",
     ),
+    poolWaitMs: parseInteger(
+      env.CHATGPT_BROWSER_POOL_WAIT_MS,
+      15000,
+      1000,
+      120000,
+      "CHATGPT_BROWSER_POOL_WAIT_MS",
+    ),
+    poolWorkerLeaseTimeoutMs: parseInteger(
+      env.CHATGPT_BROWSER_POOL_WORKER_LEASE_TIMEOUT_MS,
+      1000,
+      250,
+      15000,
+      "CHATGPT_BROWSER_POOL_WORKER_LEASE_TIMEOUT_MS",
+    ),
     outputDir: path.resolve(
       expandHome(env.CHATGPT_IMAGE_OUTPUT_DIR || path.join(root, "outputs"), homeDir),
     ),
@@ -212,5 +270,6 @@ export function loadConfig(env = process.env, options = {}) {
       1800000,
       "CHATGPT_IMAGE_TIMEOUT_MS",
     ),
+    workers,
   };
 }
