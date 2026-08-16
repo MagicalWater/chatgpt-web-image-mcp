@@ -345,7 +345,7 @@ Windows / macOS 可选账号切换配置同样位于仓库根目录的本地 `co
 
 如果生成过程中 ChatGPT 才显示“太多要求 / Too many requests”，工具会自动按下确认按钮并继续等待同一次生成结果，不会仅因为这个可关闭对话框就让当前生成失败。
 
-如果 ChatGPT 明确返回了一则文字回复，表明本次图片生成并未开始（例如要求先补传必要的 source image），当前 fork 会将其视为 terminal generation failure，而不是继续等待到图片生成超时。此类错误对 MCP 调用者只返回与失败直接相关的、经过清洗且有长度上限的可见 assistant 回复或片段；不会返回整页 DOM、完整会话历史、浏览器状态、Cookie、token、环境变量、profile 内容或 stack trace。该行为已通过 Windows production acceptance。
+如果 ChatGPT 明确返回了一则文字回复，表明本次图片生成并未开始（例如要求先补传必要的 source image，或明确声称当前对话环境无法调用图片生成工具/功能、因此不能直接生成或输出图片），当前 fork 会将其视为 terminal generation failure，而不是继续等待到图片生成超时。缺少必要输入返回 `IMAGE_GENERATION_INPUT_REQUIRED`；当前对话图片生成能力明确不可用时返回 `IMAGE_GENERATION_UNAVAILABLE`。此类错误对 MCP 调用者只返回与失败直接相关的、经过清洗且有长度上限的可见 assistant 回复或片段；不会返回整页 DOM、完整会话历史、浏览器状态、Cookie、token、环境变量、profile 内容或 stack trace。
 
 对于 MCP 自己启动的 dedicated Chrome profile，terminal generation failure（包括结果超时）会在错误返回前关闭 MCP-owned persistent context 并释放 profile lease，避免后续独立 MCP process 因 profile lease 仍被占用而阻塞；该行为已通过 Windows production acceptance。CDP 模式连接的是操作者拥有的浏览器，生成失败时不会主动关闭操作者的 Chrome；本轮 production acceptance 不把 CDP transport 主动断连声明为已验证行为。
 
@@ -411,7 +411,7 @@ node bin/chatgpt-web-image.js generate --surface images --prompt "生成一个�
 - 文字档案和项目上下文能提高连续性，但网页生图不提供身份锁定保证；要求高一致性时，应在允许目录中提供同一张人物参考图，并在连续请求中复用。
 - ChatGPT Projects 的按钮和字段会随网页版本或语言变化；当前自动创建支持中文和英文界面。
 - 验证码、二次登录、地区限制、账号额度和内容安全拦截需要操作者在可见浏览器中处理。
-- 如果 ChatGPT 明确只返回要求补充必要输入的文字而没有开始图片生成，工具会 fail-fast 并返回经过清洗的相关 assistant 回复/片段；Windows dedicated-profile production route 已完成该行为与 cleanup 验收。
+- 如果 ChatGPT 明确只返回要求补充必要输入的文字，或明确声明当前对话没有可用的图片生成工具/能力而不能直接生成图片，工具会 fail-fast 并返回经过清洗的相关 assistant 回复/片段，而不会等到完整图片生成 timeout。
 - 网页端不提供稳定的模型响应元数据，本工具不会声称验证了底层具体模型。
 - CDP 模式不会主动关闭操作者的 Chrome；专用 profile 模式在 CLI/MCP 正常退出时会关闭自己启动的窗口。
 

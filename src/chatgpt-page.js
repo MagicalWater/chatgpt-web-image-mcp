@@ -156,14 +156,45 @@ export function classifyNonImageAssistantReply(value) {
     (chineseSourceMention && chineseAttachmentMention && chineseBlockedForInput) ||
     /請(?:先)?(?:上傳|附加|提供)[^。！？.!?]{0,80}(?:來源|參考)?圖片/.test(assistantReply) ||
     /请(?:先)?(?:上传|附加|提供)[^。！？.!?]{0,80}(?:来源|参考)?图片/.test(assistantReply);
-  if (!sourceRequired) {
-    return { terminal: false };
+  if (sourceRequired) {
+    return {
+      terminal: true,
+      code: "IMAGE_GENERATION_INPUT_REQUIRED",
+      assistantReply,
+      message: "ChatGPT did not start image generation and requested additional input.",
+    };
   }
-  return {
-    terminal: true,
-    code: "IMAGE_GENERATION_INPUT_REQUIRED",
-    assistantReply,
-  };
+
+  const englishImageCapabilityMention =
+    /(?:image|picture|visual|poster|diagram|artwork)[ -]?(?:generation|generator|creation|tool|feature|capability)/.test(lower) ||
+    /(?:generate|create|render|produce|output)[^.!?]{0,40}(?:image|picture|visual|poster|diagram|artwork)/.test(lower);
+  const englishCapabilityUnavailable =
+    /(?:cannot|can['’]t|unable to|not able to|unavailable|not available|no access to|not enabled)[^.!?]{0,60}(?:call|access|use|invoke|generate|create|render|produce|output|image|picture|visual|poster|diagram|artwork|generation|generator|tool|feature|capability)/.test(lower) ||
+    /(?:image|picture|visual|poster|diagram|artwork)[ -]?(?:generation|generator|creation|tool|feature|capability)[^.!?]{0,40}(?:unavailable|not available|not enabled|cannot|can['’]t be used|no access)/.test(lower);
+  const englishPositiveFallback =
+    /(?:i|we) (?:can(?!['’]t)|will(?! not))(?: still)?[^.!?]{0,40}(?:proceed|continue|generate|create|render|produce)[^.!?]{0,40}(?:image|picture|visual|poster|diagram|artwork)/.test(lower);
+
+  const chineseImageCapabilityMention =
+    /(?:圖片|图片|圖像|图像|影像)[^。！？]{0,12}(?:生成|產生|产生)(?:工具|功能|能力)?/.test(assistantReply) ||
+    /(?:生成|產生|产生|輸出|输出|製作|制作|繪製|绘制|渲染)[^。！？]{0,30}(?:圖片|图片|圖像|图像|海報|海报|架構圖|架构图)/.test(assistantReply);
+  const chineseCapabilityUnavailable =
+    /(?:無法|无法|不能|沒辦法|没办法|不可|未能|沒有權限|没有权限)[^。！？]{0,60}(?:呼叫|调用|使用|存取|访问|啟用|启用|生成|產生|产生|輸出|输出|製作|制作|繪製|绘制|渲染)/.test(assistantReply);
+  const chinesePositiveFallback =
+    /(?:我|我們|我们)(?:仍然|仍|還|还)?(?:可以|可|會|会)[^。！？]{0,40}(?:繼續|继续|生成|產生|产生|輸出|输出|製作|制作|繪製|绘制|渲染)/.test(assistantReply);
+
+  const generationUnavailable =
+    ((englishImageCapabilityMention && englishCapabilityUnavailable) && !englishPositiveFallback) ||
+    ((chineseImageCapabilityMention && chineseCapabilityUnavailable) && !chinesePositiveFallback);
+  if (generationUnavailable) {
+    return {
+      terminal: true,
+      code: "IMAGE_GENERATION_UNAVAILABLE",
+      assistantReply,
+      message: "ChatGPT reported that image generation is unavailable in this conversation.",
+    };
+  }
+
+  return { terminal: false };
 }
 
 async function listVisibleAssistantReplies(page) {
@@ -411,7 +442,7 @@ export async function waitForGeneratedImages(
         .find((candidate) => candidate.terminal);
       if (terminalReply?.terminal && !generating) {
         throw new UserFacingError(
-          `ChatGPT did not start image generation and requested additional input. Assistant reply: ${terminalReply.assistantReply}`,
+          `${terminalReply.message} Assistant reply: ${terminalReply.assistantReply}`,
           terminalReply.code,
           { assistantReply: terminalReply.assistantReply },
         );

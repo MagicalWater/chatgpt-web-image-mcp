@@ -288,6 +288,38 @@ test("non-image assistant classifier does not reject a positive Chinese acknowle
   assert.equal(result.terminal, false);
 });
 
+test("non-image assistant classifier recognizes a Traditional Chinese image-tool unavailable refusal", () => {
+  const result = classifyNonImageAssistantReply(
+    "由於你要求的是重新生成一張圖片（而不是調整提示文字），我需要直接使用圖片生成功能。但目前這個對話執行環境無法呼叫圖片產生工具，因此我沒辦法直接輸出新的架構海報。",
+  );
+  assert.equal(result.terminal, true);
+  assert.equal(result.code, "IMAGE_GENERATION_UNAVAILABLE");
+  assert.match(result.assistantReply, /無法呼叫圖片產生工具/);
+});
+
+test("non-image assistant classifier recognizes a Simplified Chinese image-tool unavailable refusal", () => {
+  const result = classifyNonImageAssistantReply(
+    "当前这个对话环境无法调用图片生成工具，所以我没办法直接输出新的架构海报。",
+  );
+  assert.equal(result.terminal, true);
+  assert.equal(result.code, "IMAGE_GENERATION_UNAVAILABLE");
+});
+
+test("non-image assistant classifier recognizes an English image-tool unavailable refusal", () => {
+  const result = classifyNonImageAssistantReply(
+    "Image generation tools are not available in this conversation, so I can't directly generate the requested architecture poster.",
+  );
+  assert.equal(result.terminal, true);
+  assert.equal(result.code, "IMAGE_GENERATION_UNAVAILABLE");
+});
+
+test("non-image assistant classifier does not reject an unavailable tool when the assistant can still generate with a fallback", () => {
+  const result = classifyNonImageAssistantReply(
+    "The preferred image generation tool is unavailable, but I can still generate the image with the available fallback.",
+  );
+  assert.equal(result.terminal, false);
+});
+
 test("assistant diagnostic is bounded and strips control characters", () => {
   const result = sanitizeAssistantDiagnostic(`reply\u0000 ${"x".repeat(5000)}`);
   assert.ok(result.length <= 4000);
@@ -362,6 +394,49 @@ test("result polling fails fast on a new non-image assistant reply and returns i
     },
   );
   assert.equal(scanCalls, 1);
+});
+
+test("result polling fails fast when ChatGPT says image generation is unavailable", async () => {
+  let virtualNow = 0;
+  const page = {
+    async evaluate() {
+      return [];
+    },
+    locator() {
+      return { async count() { return 0; } };
+    },
+    async waitForTimeout(ms) {
+      virtualNow += ms;
+    },
+  };
+
+  await assert.rejects(
+    waitForGeneratedImages(
+      page,
+      new Set(),
+      20,
+      4,
+      { image: "image", generating: "generating" },
+      {
+        beforeAssistantReplies: new Set(),
+        async listAssistantReplies() {
+          return ["目前這個對話執行環境無法呼叫圖片產生工具，因此我沒辦法直接輸出新的架構海報。"];
+        },
+        async listCandidates() {
+          return [];
+        },
+        now: () => virtualNow,
+        pollMs: 1,
+        stableMs: 0,
+      },
+    ),
+    (error) => {
+      assert.equal(error.code, "IMAGE_GENERATION_UNAVAILABLE");
+      assert.match(error.message, /image generation is unavailable/i);
+      assert.match(error.assistantReply, /無法呼叫圖片產生工具/);
+      return true;
+    },
+  );
 });
 
 test("result timeout preserves the latest new assistant reply even when it is not a known fail-fast class", async () => {
